@@ -89,6 +89,23 @@ export interface SessionTokenUsage {
   cacheReadTokens: number;
 }
 
+export interface LastRequestTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens?: number;
+}
+
+export interface ThinkingState {
+  active: boolean;
+  lastSeen: Date;
+}
+
+export interface PendingPermission {
+  toolName: string;
+  targetSummary: string;
+  timestamp: Date;
+}
+
 export interface TranscriptData {
   tools: ToolEntry[];
   agents: AgentEntry[];
@@ -96,6 +113,9 @@ export interface TranscriptData {
   sessionStart?: Date;
   sessionName?: string;
   sessionTokens?: SessionTokenUsage;
+  lastRequestTokenUsage?: LastRequestTokenUsage;
+  thinkingState?: ThinkingState;
+  pendingPermission?: PendingPermission;
 }
 
 export interface RenderContext {

@@ -859,7 +859,8 @@ test('renderAgentsLine renders completed agents', () => {
   ];
 
   const line = renderAgentsLine(ctx);
-  assert.ok(line?.includes('explore'));
+  // formatAgentType capitalizes the first letter for display.
+  assert.ok(line?.includes('Explore'));
   assert.ok(line?.includes('haiku'));
 });
 

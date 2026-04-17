@@ -88,6 +88,13 @@ export function renderProjectLine(ctx) {
     if (costEstimate) {
         parts.push(costEstimate);
     }
+    if (ctx.transcript.thinkingState?.active) {
+        parts.push(dim('∿ thinking'));
+    }
+    if (ctx.transcript.pendingPermission) {
+        const target = ctx.transcript.pendingPermission.targetSummary;
+        parts.push(yellow(`? ${target}`));
+    }
     const customLine = display?.customLine;
     if (customLine) {
         parts.push(customColor(customLine, colors));

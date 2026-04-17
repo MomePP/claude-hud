@@ -4,6 +4,19 @@ import * as path from 'node:path';
 import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
+// 4MB tail window: enough to catch the most recent ~80–130 agent calls and
+// tool results while bounding I/O. Ported from omc-hud. Files smaller than
+// this threshold are still fully streamed.
+const MAX_TAIL_BYTES = 4 * 1024 * 1024;
+// Tools known to require permission approval in Claude Code.
+const PERMISSION_TOOLS = new Set(['Edit', 'Write', 'Bash']);
+// Permission prompts typically resolve within a couple of seconds; after 3s
+// we assume the prompt was answered (approved or denied).
+const PERMISSION_THRESHOLD_MS = 3000;
+// Content block `type` values that indicate extended-thinking activity.
+const THINKING_PART_TYPES = new Set(['thinking', 'reasoning']);
+// How long after the last thinking block we still consider thinking "active".
+const THINKING_RECENCY_MS = 30_000;
 let createReadStreamImpl = fs.createReadStream;
 function normalizeTokenCount(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -41,6 +54,27 @@ function readTranscriptFileState(transcriptPath) {
     catch {
         return null;
     }
+}
+// Read the last `maxBytes` of a file and split into lines. Discards the first
+// line if we started mid-file (handles partial lines and UTF-8 boundary splits).
+function readTailLines(filePath, fileSize, maxBytes) {
+    const startOffset = Math.max(0, fileSize - maxBytes);
+    const bytesToRead = fileSize - startOffset;
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(bytesToRead);
+    try {
+        fs.readSync(fd, buffer, 0, bytesToRead, startOffset);
+    }
+    finally {
+        fs.closeSync(fd);
+    }
+    const lines = buffer.toString('utf8').split('\n');
+    // Drop the first line when we started mid-file — it may be a partial JSONL
+    // entry or a UTF-8 multibyte split.
+    if (startOffset > 0 && lines.length > 0) {
+        lines.shift();
+    }
+    return lines;
 }
 function serializeTranscriptData(data) {
     return {
@@ -131,6 +165,10 @@ export async function parseTranscript(transcriptPath) {
     // Maps background-agent id (e.g. "a8de3dd") → tool_use_id, so a later
     // `<task-notification>` completion without a tool_use_id can still resolve.
     const backgroundAgentMap = new Map();
+    // tool_use_id → {toolName, target, timestamp} for permission-requiring tools
+    // that haven't received a tool_result yet. Entries drop when the result
+    // arrives; surfaced on the result when the youngest entry is <3s old.
+    const pendingPermissionMap = new Map();
     let latestTodos = [];
     const taskIdToIndex = new Map();
     let latestSlug;
@@ -142,35 +180,51 @@ export async function parseTranscript(transcriptPath) {
         cacheReadTokens: 0,
     };
     let parsedCleanly = false;
-    try {
-        const fileStream = createReadStreamImpl(transcriptPath);
-        const rl = readline.createInterface({
-            input: fileStream,
-            crlfDelay: Infinity,
-        });
-        for await (const line of rl) {
-            if (!line.trim())
-                continue;
-            try {
-                const entry = JSON.parse(line);
-                if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
-                    customTitle = entry.customTitle;
-                }
-                else if (typeof entry.slug === 'string') {
-                    latestSlug = entry.slug;
-                }
-                // Accumulate token usage from assistant messages
-                if (entry.type === 'assistant' && entry.message?.usage) {
-                    const usage = entry.message.usage;
-                    sessionTokens.inputTokens += normalizeTokenCount(usage.input_tokens);
-                    sessionTokens.outputTokens += normalizeTokenCount(usage.output_tokens);
-                    sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
-                    sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
-                }
-                processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap);
+    // Tail-read only covers the last 4MB, so token accumulation and session
+    // start would be partial. Flag so we can skip writing those to the result.
+    const usedTailRead = transcriptState.size > MAX_TAIL_BYTES;
+    const handleLine = (line) => {
+        if (!line.trim())
+            return;
+        try {
+            const entry = JSON.parse(line);
+            if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+                customTitle = entry.customTitle;
             }
-            catch {
-                // Skip malformed lines
+            else if (typeof entry.slug === 'string') {
+                latestSlug = entry.slug;
+            }
+            if (entry.type === 'assistant' && entry.message?.usage) {
+                const usage = entry.message.usage;
+                sessionTokens.inputTokens += normalizeTokenCount(usage.input_tokens);
+                sessionTokens.outputTokens += normalizeTokenCount(usage.output_tokens);
+                sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
+                sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
+                const lastUsage = extractLastRequestTokenUsage(usage);
+                if (lastUsage) {
+                    result.lastRequestTokenUsage = lastUsage;
+                }
+            }
+            processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap, pendingPermissionMap);
+        }
+        catch {
+            // Skip malformed lines
+        }
+    };
+    try {
+        if (usedTailRead) {
+            for (const line of readTailLines(transcriptPath, transcriptState.size, MAX_TAIL_BYTES)) {
+                handleLine(line);
+            }
+        }
+        else {
+            const fileStream = createReadStreamImpl(transcriptPath);
+            const rl = readline.createInterface({
+                input: fileStream,
+                crlfDelay: Infinity,
+            });
+            for await (const line of rl) {
+                handleLine(line);
             }
         }
         parsedCleanly = true;
@@ -182,7 +236,30 @@ export async function parseTranscript(transcriptPath) {
     result.agents = Array.from(agentMap.values()).slice(-10);
     result.todos = latestTodos;
     result.sessionName = customTitle ?? latestSlug;
-    result.sessionTokens = sessionTokens;
+    // Tail-read totals cover only the last 4MB so they'd be misleadingly low;
+    // the same goes for sessionStart, which would be the first in-tail entry
+    // rather than the true session origin.
+    if (usedTailRead) {
+        result.sessionStart = undefined;
+        result.sessionTokens = undefined;
+    }
+    else {
+        result.sessionTokens = sessionTokens;
+    }
+    // Decay thinking-state: mark inactive if the last thinking block was >30s ago.
+    if (result.thinkingState) {
+        const age = Date.now() - result.thinkingState.lastSeen.getTime();
+        result.thinkingState = { ...result.thinkingState, active: age <= THINKING_RECENCY_MS };
+    }
+    // Surface the youngest pending permission that's still within the prompt
+    // window. Older ones are assumed to have been answered already.
+    const now = Date.now();
+    for (const permission of pendingPermissionMap.values()) {
+        if (now - permission.timestamp.getTime() <= PERMISSION_THRESHOLD_MS) {
+            result.pendingPermission = permission;
+            break;
+        }
+    }
     if (parsedCleanly) {
         writeTranscriptCache(transcriptPath, transcriptState, result);
     }
@@ -191,7 +268,7 @@ export async function parseTranscript(transcriptPath) {
 export function _setCreateReadStreamForTests(impl) {
     createReadStreamImpl = impl ?? fs.createReadStream;
 }
-function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap) {
+function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap, pendingPermissionMap) {
     const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
     if (!result.sessionStart && entry.timestamp) {
         result.sessionStart = timestamp;
@@ -220,11 +297,26 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
     if (!content || !Array.isArray(content))
         return;
     for (const block of content) {
+        // Extended-thinking / reasoning blocks extend the active window.
+        if (THINKING_PART_TYPES.has(block.type)) {
+            result.thinkingState = { active: true, lastSeen: timestamp };
+        }
         if (block.type === 'tool_use' && block.id && block.name) {
             // OMC routes tool calls through a proxy layer and emits names like
             // "proxy_Edit". Strip the prefix so downstream routing and the HUD
             // display treat them identically to the native tools.
             const canonicalName = block.name.replace(/^proxy_/, '');
+            // Permission-requiring tools get tracked so the HUD can show an
+            // "APPROVE?" hint while the user is looking at the prompt. Skip
+            // when the entry has no real timestamp — we'd otherwise use Date.now()
+            // and incorrectly treat every stale fixture entry as freshly pending.
+            if (PERMISSION_TOOLS.has(canonicalName) && entry.timestamp) {
+                pendingPermissionMap.set(block.id, {
+                    toolName: canonicalName,
+                    targetSummary: extractPermissionTarget(canonicalName, block.input) ?? '...',
+                    timestamp,
+                });
+            }
             const toolEntry = {
                 id: block.id,
                 name: canonicalName,
@@ -314,6 +406,8 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
             }
         }
         if (block.type === 'tool_result' && block.tool_use_id) {
+            // Clear any pending permission entry — the approval was resolved.
+            pendingPermissionMap.delete(block.tool_use_id);
             const tool = toolMap.get(block.tool_use_id);
             if (tool) {
                 tool.status = block.is_error ? 'error' : 'completed';
@@ -388,6 +482,45 @@ function parseTaskNotification(content) {
         toolUseId: toolUseIdMatch ? toolUseIdMatch[1] : null,
         status: statusMatch[1],
     };
+}
+function extractLastRequestTokenUsage(usage) {
+    const input = usage.input_tokens;
+    const output = usage.output_tokens;
+    if (typeof input !== 'number' && typeof output !== 'number')
+        return null;
+    const reasoning = usage.reasoning_tokens
+        ?? usage.output_tokens_details?.reasoning_tokens
+        ?? usage.output_tokens_details?.reasoningTokens
+        ?? usage.completion_tokens_details?.reasoning_tokens
+        ?? usage.completion_tokens_details?.reasoningTokens;
+    const out = {
+        inputTokens: normalizeTokenCount(input),
+        outputTokens: normalizeTokenCount(output),
+    };
+    if (typeof reasoning === 'number' && reasoning > 0) {
+        out.reasoningTokens = normalizeTokenCount(reasoning);
+    }
+    return out;
+}
+// Short, HUD-friendly label for permission prompts — "file.ts", "rm -rf ~", etc.
+function extractPermissionTarget(toolName, input) {
+    if (!input)
+        return undefined;
+    if (toolName === 'Edit' || toolName === 'Write') {
+        const raw = input.file_path ?? input.path;
+        if (!raw)
+            return undefined;
+        const segments = raw.replace(/\\/g, '/').split('/');
+        return segments[segments.length - 1] || raw;
+    }
+    if (toolName === 'Bash') {
+        const cmd = input.command;
+        if (!cmd)
+            return undefined;
+        const trimmed = cmd.trim().slice(0, 20);
+        return trimmed.length < cmd.trim().length ? `${trimmed}...` : trimmed;
+    }
+    return undefined;
 }
 function extractTarget(toolName, input) {
     if (!input)
