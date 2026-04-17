@@ -1700,7 +1700,7 @@ test('render expanded layout honors custom elementOrder including activity place
   const combinedIndex = lines.findIndex(line => line.includes('Usage') && line.includes('Context'));
   const memoryIndex = lines.findIndex(line => line.includes('Approx RAM'));
   const environmentIndex = lines.findIndex(line => line.includes('CLAUDE.md'));
-  const agentIndex = lines.findIndex(line => line.includes('planner'));
+  const agentIndex = lines.findIndex(line => line.includes('Planner'));
   const todoIndex = lines.findIndex(line => line.includes('todo-marker'));
 
   assert.deepEqual(

@@ -21,7 +21,17 @@ function restoreEnvVar(name, value) {
 }
 
 test('loadConfig returns valid config structure', async () => {
-  const config = await loadConfig();
+  // Use a temp dir so the test is isolated from any real user config file.
+  const tmpDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-test-'));
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = tmpDir;
+  let config;
+  try {
+    config = await loadConfig();
+  } finally {
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(tmpDir, { recursive: true, force: true });
+  }
 
   // pathLevels must be 1, 2, or 3
   assert.ok([1, 2, 3].includes(config.pathLevels), 'pathLevels should be 1, 2, or 3');

@@ -159,9 +159,9 @@ test('render wraps long lines to terminal width and keeps all activity lines vis
   });
 
   assert.equal(countContaining(lines, 'Read'), 1, 'tool line should remain visible');
-  assert.equal(countContaining(lines, 'plan-a'), 1, 'first agent line should remain visible');
-  assert.equal(countContaining(lines, 'plan-b'), 1, 'second agent line should remain visible');
-  assert.equal(countContaining(lines, 'plan-c'), 1, 'third agent line should remain visible');
+  assert.equal(countContaining(lines, 'Plan-a'), 1, 'first agent line should remain visible');
+  assert.equal(countContaining(lines, 'Plan-b'), 1, 'second agent line should remain visible');
+  assert.equal(countContaining(lines, 'Plan-c'), 1, 'third agent line should remain visible');
   assert.equal(countContaining(lines, 'todo-marker'), 1, 'todo line should remain visible');
   assert.ok(lines.every(line => displayWidth(line) <= 20), 'all lines should fit terminal width');
 });
