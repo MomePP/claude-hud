@@ -66,6 +66,17 @@ interface SerializedAgentEntry extends Omit<AgentEntry, 'startTime' | 'endTime'>
   endTime?: string;
 }
 
+interface SerializedThinkingState {
+  active: boolean;
+  lastSeen: string;
+}
+
+interface SerializedPendingPermission {
+  toolName: string;
+  targetSummary: string;
+  timestamp: string;
+}
+
 interface SerializedTranscriptData {
   tools: SerializedToolEntry[];
   agents: SerializedAgentEntry[];
@@ -73,6 +84,8 @@ interface SerializedTranscriptData {
   sessionStart?: string;
   sessionName?: string;
   sessionTokens?: SessionTokenUsage;
+  thinkingState?: SerializedThinkingState;
+  pendingPermission?: SerializedPendingPermission;
 }
 
 interface TranscriptCacheFile {
@@ -178,6 +191,16 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
     sessionStart: data.sessionStart?.toISOString(),
     sessionName: data.sessionName,
     sessionTokens: data.sessionTokens,
+    thinkingState: data.thinkingState
+      ? { active: data.thinkingState.active, lastSeen: data.thinkingState.lastSeen.toISOString() }
+      : undefined,
+    pendingPermission: data.pendingPermission
+      ? {
+          toolName: data.pendingPermission.toolName,
+          targetSummary: data.pendingPermission.targetSummary,
+          timestamp: data.pendingPermission.timestamp.toISOString(),
+        }
+      : undefined,
   };
 }
 
@@ -197,6 +220,16 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
     sessionStart: data.sessionStart ? new Date(data.sessionStart) : undefined,
     sessionName: data.sessionName,
     sessionTokens: normalizeSessionTokens(data.sessionTokens),
+    thinkingState: data.thinkingState
+      ? { active: data.thinkingState.active, lastSeen: new Date(data.thinkingState.lastSeen) }
+      : undefined,
+    pendingPermission: data.pendingPermission
+      ? {
+          toolName: data.pendingPermission.toolName,
+          targetSummary: data.pendingPermission.targetSummary,
+          timestamp: new Date(data.pendingPermission.timestamp),
+        }
+      : undefined,
   };
 }
 
@@ -234,6 +267,30 @@ function writeTranscriptCache(transcriptPath: string, state: TranscriptFileState
   }
 }
 
+/**
+ * Recompute time-decay fields on every call so cache hits don't return stale
+ * `active` / `pendingPermission` values. Called on both the cache-hit and the
+ * fresh-parse return paths.
+ */
+function finalizeTranscriptResult(result: TranscriptData): TranscriptData {
+  const now = Date.now();
+
+  let thinkingState = result.thinkingState;
+  if (thinkingState) {
+    const age = now - thinkingState.lastSeen.getTime();
+    thinkingState = { ...thinkingState, active: age <= THINKING_RECENCY_MS };
+  }
+
+  let pendingPermission = result.pendingPermission;
+  if (pendingPermission) {
+    if (now - pendingPermission.timestamp.getTime() > PERMISSION_THRESHOLD_MS) {
+      pendingPermission = undefined;
+    }
+  }
+
+  return { ...result, thinkingState, pendingPermission };
+}
+
 export async function parseTranscript(transcriptPath: string): Promise<TranscriptData> {
   const result: TranscriptData = {
     tools: [],
@@ -252,7 +309,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
 
   const cached = readTranscriptCache(transcriptPath, transcriptState);
   if (cached) {
-    return cached;
+    return finalizeTranscriptResult(cached);
   }
 
   const toolMap = new Map<string, ToolEntry>();
@@ -341,27 +398,21 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     result.sessionTokens = sessionTokens;
   }
 
-  // Decay thinking-state: mark inactive if the last thinking block was >30s ago.
-  if (result.thinkingState) {
-    const age = Date.now() - result.thinkingState.lastSeen.getTime();
-    result.thinkingState = { ...result.thinkingState, active: age <= THINKING_RECENCY_MS };
-  }
-
   // Surface the youngest pending permission that's still within the prompt
-  // window. Older ones are assumed to have been answered already.
-  const now = Date.now();
+  // window. Store it raw (with its timestamp) so finalizeTranscriptResult can
+  // re-evaluate freshness on every read — including cache hits.
   for (const permission of pendingPermissionMap.values()) {
-    if (now - permission.timestamp.getTime() <= PERMISSION_THRESHOLD_MS) {
-      result.pendingPermission = permission;
-      break;
-    }
+    result.pendingPermission = permission;
+    break;
   }
 
+  // Write raw result (with lastSeen / timestamp intact) before finalization so
+  // the cache stores the data needed for decay recomputation on every cache hit.
   if (parsedCleanly) {
     writeTranscriptCache(transcriptPath, transcriptState, result);
   }
 
-  return result;
+  return finalizeTranscriptResult(result);
 }
 
 export function _setCreateReadStreamForTests(impl: typeof fs.createReadStream | null): void {

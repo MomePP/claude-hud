@@ -309,3 +309,56 @@ test('pendingPermission is cleared once tool_result arrives', async () => {
   const result = await parseTranscript(file);
   assert.equal(result.pendingPermission, undefined);
 });
+
+test('thinkingState.active decays to false on cache-hit after the recency window', async () => {
+  // Use a timestamp ~1 minute in the past — well past THINKING_RECENCY_MS (30s).
+  const oldTimestamp = new Date(Date.now() - 60_000).toISOString();
+  const file = writeFixture([
+    {
+      timestamp: oldTimestamp,
+      type: 'assistant',
+      message: { content: [{ type: 'thinking' }] },
+    },
+  ]);
+
+  // First call — seeds the cache.
+  const first = await parseTranscript(file);
+  // The thinking block is old so active should already be false on first call.
+  assert.ok(first.thinkingState, 'thinkingState should be set');
+  assert.equal(first.thinkingState.active, false, 'should be inactive on first call (old block)');
+
+  // Second call — cache hit (file unchanged). Decay must still be computed.
+  const second = await parseTranscript(file);
+  assert.ok(second.thinkingState, 'thinkingState should be set on cache hit');
+  assert.equal(second.thinkingState.active, false, 'should remain inactive on cache hit');
+});
+
+test('pendingPermission is dropped on cache-hit once past the prompt window', async () => {
+  // Use a timestamp ~4s in the past — past PERMISSION_THRESHOLD_MS (3s).
+  const oldTimestamp = new Date(Date.now() - 4000).toISOString();
+  const file = writeFixture([
+    {
+      timestamp: oldTimestamp,
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'perm-stale',
+            name: 'Bash',
+            input: { command: 'rm -rf /old' },
+          },
+        ],
+      },
+    },
+  ]);
+
+  // First call — seeds the cache; the entry is already stale so pendingPermission
+  // should be undefined immediately (finalizeTranscriptResult clears it).
+  const first = await parseTranscript(file);
+  assert.equal(first.pendingPermission, undefined, 'stale permission should be dropped on first call');
+
+  // Second call — cache hit. Must still return undefined.
+  const second = await parseTranscript(file);
+  assert.equal(second.pendingPermission, undefined, 'stale permission should remain dropped on cache hit');
+});
