@@ -4,6 +4,31 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Three new `display` toggles for the inline project-line indicators:
+  `display.showThinkingIndicator` (default `true`),
+  `display.showPendingPermission` (default `true`),
+  `display.showLastRequestTokens` (default `false`).
+  The first two preserve existing behavior from 0.1.0; the third surfaces the
+  most recent assistant turn's token counts (`last: 12k→678`, with a
+  `(+Xk)` reasoning suffix when present) and is opt-in because it changes
+  every assistant turn.
+
+### Fixed
+- `thinkingState.active` and `pendingPermission` no longer get cached with
+  their computed booleans — a `finalizeTranscriptResult` step recomputes
+  both decay checks against `Date.now()` on every return, including cache
+  hits. Previously a cache hit could keep `∿ thinking` on screen for
+  minutes after thinking actually stopped.
+
+### Test hygiene
+- `tests/config.test.js` now isolates `loadConfig()` under a temporary
+  `CLAUDE_CONFIG_DIR` so the developer's live config no longer leaks into
+  the assertion.
+- `tests/render.test.js` and `tests/render-width.test.js` assertions now
+  match the capitalized agent-type display (`Planner`, `Plan-a`) introduced
+  by `formatAgentType` in 0.1.0.
+
 ## [0.1.0] - 2026-04-17 — MomePP fork
 
 First versioned release after forking. Scope narrowed to personal use on macOS/Linux

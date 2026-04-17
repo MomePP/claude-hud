@@ -249,6 +249,9 @@ If user chooses "Remove", set `display.customLine` to `""` in config.
 | Session name | `display.showSessionName` |
 | Session duration | `display.showDuration` |
 | Session tokens | `display.showSessionTokens` |
+| Thinking indicator | `display.showThinkingIndicator` |
+| Pending permission hint | `display.showPendingPermission` |
+| Last-request tokens | `display.showLastRequestTokens` |
 | Custom line | `display.customLine` |
 
 **Always true (not configurable):**

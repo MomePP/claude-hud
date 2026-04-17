@@ -160,6 +160,9 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showSessionName` | boolean | false | Show session slug or custom title from `/rename` |
 | `display.showClaudeCodeVersion` | boolean | false | Show the installed Claude Code version, e.g. `CC v2.1.81` |
 | `display.showMemoryUsage` | boolean | false | Show an approximate system RAM usage line in expanded layout |
+| `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
+| `display.showPendingPermission` | boolean | true | Inline `? <target>` hint on the project line while an Edit/Write/Bash permission prompt is pending (≤3s window) |
+| `display.showLastRequestTokens` | boolean | false | Inline `last: 12k→678` counter showing the most recent assistant turn's input and output tokens; appends `(+Xk)` when reasoning tokens are present |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
@@ -175,6 +178,8 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brightBlue`, `brightMagenta`. You can also use a 256-color number (`0-255`) or hex (`#rrggbb`).
 
 `display.showMemoryUsage` is fully opt-in and only renders in `expanded` layout. It reports approximate system RAM usage from the local machine, not precise memory pressure inside Claude Code or a specific process. The number may overstate actual pressure because reclaimable OS cache and buffers can still be counted as used memory.
+
+`display.showThinkingIndicator`, `display.showPendingPermission`, and `display.showLastRequestTokens` are fork-only additions. Thinking and pending-permission default to on (they've shipped that way since 0.1.0 without being noisy in practice); the last-request token counter defaults to off because it renders on every assistant turn. All three share the project line, so they only appear when there's live state to show.
 
 `display.showCost` is fully opt-in. ClaudeHUD prefers the native `cost.total_cost_usd` field that Claude Code provides on stdin when it is available. If that field is absent or invalid for a direct Anthropic session, ClaudeHUD falls back to the existing local transcript-based estimate so the cost line still works on older payloads. The native field is absent before the first API response in a session, so the cost display may stay hidden until then. ClaudeHUD also keeps the cost hidden for known routed providers such as Bedrock, because cloud-provider billed sessions may report `$0.00` or omit the field even though the session was not literally free.
 
