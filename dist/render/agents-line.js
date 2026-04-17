@@ -37,13 +37,24 @@ function getStatusIcon(status) {
 }
 function formatAgent(agent, colors) {
     const statusIcon = getStatusIcon(agent.status);
-    const type = magenta(agent.type);
+    const type = magenta(formatAgentType(agent.type));
     const model = agent.model ? label(`[${agent.model}]`, colors) : '';
     const desc = agent.description
         ? label(`: ${truncateDesc(agent.description)}`, colors)
         : '';
     const elapsed = formatElapsed(agent);
     return `${statusIcon} ${type}${model ? ` ${model}` : ''}${desc} ${label(`(${elapsed})`, colors)}`;
+}
+// Drop any plugin namespace (`oh-my-claudecode:explore` → `explore`) and
+// capitalize the first letter so it matches the built-in style (`Explore`).
+function formatAgentType(rawType) {
+    const withoutNamespace = rawType.includes(':')
+        ? rawType.slice(rawType.lastIndexOf(':') + 1)
+        : rawType;
+    const trimmed = withoutNamespace.trim();
+    if (!trimmed)
+        return rawType;
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 function truncateDesc(desc, maxLen = 40) {
     if (desc.length <= maxLen)

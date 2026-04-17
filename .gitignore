@@ -2,9 +2,7 @@
 node_modules/
 
 # Build artifacts
-# dist/ is gitignored but exists on main - CI builds and commits it after each merge.
-# See .github/workflows/build-dist.yml
-dist/
+# dist/ is committed to the repo; run `npm run build` before committing.
 *.tsbuildinfo
 
 # Logs
@@ -57,3 +55,4 @@ temp/
 # Lock files (keep package-lock.json for npm)
 yarn.lock
 bun.lock
+/.omc

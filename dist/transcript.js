@@ -128,6 +128,9 @@ export async function parseTranscript(transcriptPath) {
     }
     const toolMap = new Map();
     const agentMap = new Map();
+    // Maps background-agent id (e.g. "a8de3dd") → tool_use_id, so a later
+    // `<task-notification>` completion without a tool_use_id can still resolve.
+    const backgroundAgentMap = new Map();
     let latestTodos = [];
     const taskIdToIndex = new Map();
     let latestSlug;
@@ -164,7 +167,7 @@ export async function parseTranscript(transcriptPath) {
                     sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
                     sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
                 }
-                processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
+                processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap);
             }
             catch {
                 // Skip malformed lines
@@ -188,28 +191,58 @@ export async function parseTranscript(transcriptPath) {
 export function _setCreateReadStreamForTests(impl) {
     createReadStreamImpl = impl ?? fs.createReadStream;
 }
-function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result) {
+function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap) {
     const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
     if (!result.sessionStart && entry.timestamp) {
         result.sessionStart = timestamp;
     }
     const content = entry.message?.content;
+    // Claude Code emits background-agent completion as a user-role message with
+    // string-shaped content: `<task-notification>...<tool-use-id>...</tool-use-id>
+    // ...<status>completed</status>...</task-notification>`. Without this handling
+    // background agents would stay "running" forever in the HUD.
+    if (typeof content === 'string') {
+        if (content.includes('<task-notification>') || content.includes('<task_id>') || content.includes('<task-id>')) {
+            const notification = parseTaskNotification(content);
+            if (notification && notification.status === 'completed') {
+                const toolUseId = notification.toolUseId ?? backgroundAgentMap.get(notification.taskId);
+                if (toolUseId) {
+                    const agent = agentMap.get(toolUseId);
+                    if (agent && agent.status === 'running') {
+                        agent.status = 'completed';
+                        agent.endTime = timestamp;
+                    }
+                }
+            }
+        }
+        return;
+    }
     if (!content || !Array.isArray(content))
         return;
     for (const block of content) {
         if (block.type === 'tool_use' && block.id && block.name) {
+            // OMC routes tool calls through a proxy layer and emits names like
+            // "proxy_Edit". Strip the prefix so downstream routing and the HUD
+            // display treat them identically to the native tools.
+            const canonicalName = block.name.replace(/^proxy_/, '');
             const toolEntry = {
                 id: block.id,
-                name: block.name,
-                target: extractTarget(block.name, block.input),
+                name: canonicalName,
+                target: extractTarget(canonicalName, block.input),
                 status: 'running',
                 startTime: timestamp,
             };
-            if (block.name === 'Task' || block.name === 'Agent') {
+            if (canonicalName === 'Task' || canonicalName === 'Agent') {
                 const input = block.input;
+                const rawType = typeof input?.subagent_type === 'string' ? input.subagent_type.trim() : '';
+                const rawName = typeof input?.name === 'string' ? input.name.trim() : '';
+                // The Agent tool defaults to the general-purpose agent when
+                // subagent_type is omitted; fall back to the caller-supplied name
+                // first since it's usually more descriptive (e.g. "build-validator").
+                const fallbackType = canonicalName === 'Agent' ? 'general-purpose' : 'unknown';
                 const agentEntry = {
                     id: block.id,
-                    type: input?.subagent_type ?? 'unknown',
+                    type: rawType || rawName || fallbackType,
                     model: input?.model ?? undefined,
                     description: input?.description ?? undefined,
                     status: 'running',
@@ -217,7 +250,7 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
                 };
                 agentMap.set(block.id, agentEntry);
             }
-            else if (block.name === 'TodoWrite') {
+            else if (canonicalName === 'TodoWrite') {
                 const input = block.input;
                 if (input?.todos && Array.isArray(input.todos)) {
                     // Build reverse map: content → taskIds from existing state
@@ -245,7 +278,7 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
                     }
                 }
             }
-            else if (block.name === 'TaskCreate') {
+            else if (canonicalName === 'TaskCreate') {
                 const input = block.input;
                 const subject = typeof input?.subject === 'string' ? input.subject : '';
                 const description = typeof input?.description === 'string' ? input.description : '';
@@ -260,7 +293,7 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
                     taskIdToIndex.set(taskId, latestTodos.length - 1);
                 }
             }
-            else if (block.name === 'TaskUpdate') {
+            else if (canonicalName === 'TaskUpdate') {
                 const input = block.input;
                 const index = resolveTaskIndex(input?.taskId, taskIdToIndex, latestTodos);
                 if (index !== null) {
@@ -288,11 +321,73 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
             }
             const agent = agentMap.get(block.tool_use_id);
             if (agent) {
-                agent.status = 'completed';
-                agent.endTime = timestamp;
+                // A run_in_background Agent completes asynchronously. Its initial
+                // tool_result just says "Async agent launched successfully" — the
+                // real completion arrives later as a `<task-notification>` block.
+                // Require the text to START WITH the phrase so we don't misclassify
+                // foreground results that happen to quote it.
+                if (isAsyncLaunchResult(block.content)) {
+                    const bgAgentId = extractBackgroundAgentId(block.content);
+                    if (bgAgentId) {
+                        backgroundAgentMap.set(bgAgentId, block.tool_use_id);
+                    }
+                    // Keep status as 'running' — real completion handled elsewhere.
+                }
+                else {
+                    agent.status = 'completed';
+                    agent.endTime = timestamp;
+                }
+            }
+            // Foreground agent completion can also arrive as a TaskOutput tool_result
+            // whose content contains a `<task-notification>` block.
+            if (block.content) {
+                const notification = parseTaskNotification(block.content);
+                if (notification && notification.status === 'completed') {
+                    const toolUseId = notification.toolUseId ?? backgroundAgentMap.get(notification.taskId);
+                    if (toolUseId) {
+                        const bg = agentMap.get(toolUseId);
+                        if (bg && bg.status === 'running') {
+                            bg.status = 'completed';
+                            bg.endTime = timestamp;
+                        }
+                    }
+                }
             }
         }
     }
+}
+function contentToText(content) {
+    if (!content)
+        return '';
+    if (typeof content === 'string')
+        return content;
+    return content.find((c) => c.type === 'text')?.text ?? '';
+}
+const ASYNC_LAUNCH_PREFIX = 'Async agent launched';
+function isAsyncLaunchResult(content) {
+    const text = contentToText(content).trimStart();
+    return text.startsWith(ASYNC_LAUNCH_PREFIX);
+}
+function extractBackgroundAgentId(content) {
+    const text = contentToText(content);
+    const match = text.match(/agentId:\s*([a-zA-Z0-9]+)/);
+    return match ? match[1] : null;
+}
+function parseTaskNotification(content) {
+    const text = contentToText(content);
+    // Claude Code emits hyphen-cased tags; accept underscore variant defensively.
+    const taskIdMatch = text.match(/<task-id>([^<]+)<\/task-id>/) ||
+        text.match(/<task_id>([^<]+)<\/task_id>/);
+    const statusMatch = text.match(/<status>([^<]+)<\/status>/);
+    const toolUseIdMatch = text.match(/<tool-use-id>([^<]+)<\/tool-use-id>/) ||
+        text.match(/<tool_use_id>([^<]+)<\/tool_use_id>/);
+    if (!taskIdMatch || !statusMatch)
+        return null;
+    return {
+        taskId: taskIdMatch[1],
+        toolUseId: toolUseIdMatch ? toolUseIdMatch[1] : null,
+        status: statusMatch[1],
+    };
 }
 function extractTarget(toolName, input) {
     if (!input)
