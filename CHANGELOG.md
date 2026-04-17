@@ -4,6 +4,17 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- MCP tool names in the tools line now compress to `<plugin>:<fn>` (e.g.
+  `mcp__plugin_context-mode_context-mode__ctx_execute` →
+  `context-mode:ctx_execute`). Standard non-plugin MCP names compress to
+  `<server>:<fn>`. Non-MCP names pass through unchanged.
+- Pending-permission indicator no longer times out after 3 seconds. It now
+  persists for every open `tool_use` until the matching `tool_result`
+  appends to the transcript, and renders a `(waiting Ns)` counter so long
+  reads of the prompt no longer look like "Claude moved on." When multiple
+  permissions are open, the youngest (most recent) one wins.
+
 ### Added
 - Three new `display` toggles for the inline project-line indicators:
   `display.showThinkingIndicator` (default `true`),

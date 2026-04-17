@@ -10,9 +10,12 @@ import { getHudPluginDir } from './claude-config-dir.js';
 const MAX_TAIL_BYTES = 4 * 1024 * 1024;
 // Tools known to require permission approval in Claude Code.
 const PERMISSION_TOOLS = new Set(['Edit', 'Write', 'Bash']);
-// Permission prompts typically resolve within a couple of seconds; after 3s
-// we assume the prompt was answered (approved or denied).
-const PERMISSION_THRESHOLD_MS = 3000;
+// Pending permission is shown for every tool_use that hasn't received a
+// matching tool_result yet — the HUD can't observe the approval prompt
+// directly, so we simply mirror "tool call is open" until Claude lands a
+// result (approval or denial both cause a tool_result to arrive). The
+// render layer adds a `(waiting Ns)` suffix so the user can tell whether
+// the open call is a fresh prompt or a long-running approved tool.
 // Content block `type` values that indicate extended-thinking activity.
 const THINKING_PART_TYPES = new Set(['thinking', 'reasoning']);
 // How long after the last thinking block we still consider thinking "active".
@@ -175,13 +178,10 @@ function finalizeTranscriptResult(result) {
         const age = now - thinkingState.lastSeen.getTime();
         thinkingState = { ...thinkingState, active: age <= THINKING_RECENCY_MS };
     }
-    let pendingPermission = result.pendingPermission;
-    if (pendingPermission) {
-        if (now - pendingPermission.timestamp.getTime() > PERMISSION_THRESHOLD_MS) {
-            pendingPermission = undefined;
-        }
-    }
-    return { ...result, thinkingState, pendingPermission };
+    // pendingPermission now survives until the matching tool_result appends
+    // to the transcript, which invalidates the cache and triggers a re-parse
+    // that clears the entry. No age-based filter here.
+    return { ...result, thinkingState, pendingPermission: result.pendingPermission };
 }
 export async function parseTranscript(transcriptPath) {
     const result = {
@@ -286,12 +286,18 @@ export async function parseTranscript(transcriptPath) {
     else {
         result.sessionTokens = sessionTokens;
     }
-    // Surface the youngest pending permission that's still within the prompt
-    // window. Store it raw (with its timestamp) so finalizeTranscriptResult can
-    // re-evaluate freshness on every read — including cache hits.
+    // Surface the YOUNGEST still-open permission entry — that's the most
+    // recent thing Claude is waiting on. Insertion order is chronological, so
+    // the last entry in the map is the freshest. The entry carries its raw
+    // timestamp; the render layer computes `(waiting Ns)` at display time.
+    let youngest;
     for (const permission of pendingPermissionMap.values()) {
-        result.pendingPermission = permission;
-        break;
+        if (!youngest || permission.timestamp.getTime() > youngest.timestamp.getTime()) {
+            youngest = permission;
+        }
+    }
+    if (youngest) {
+        result.pendingPermission = youngest;
     }
     // Write raw result (with lastSeen / timestamp intact) before finalization so
     // the cache stores the data needed for decay recomputation on every cache hit.

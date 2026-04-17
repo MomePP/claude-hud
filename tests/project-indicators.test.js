@@ -42,13 +42,19 @@ test('showThinkingIndicator=false hides the indicator even when active', () => {
   assert.doesNotMatch(stripAnsi(renderProjectLine(ctx)), /thinking/);
 });
 
-test('pending permission indicator defaults to on', () => {
+test('pending permission indicator defaults to on with waiting counter', () => {
   const ctx = baseCtx({
     transcript: {
-      pendingPermission: { toolName: 'Bash', targetSummary: 'rm -rf /tmp', timestamp: new Date() },
+      pendingPermission: {
+        toolName: 'Bash',
+        targetSummary: 'rm -rf /tmp',
+        timestamp: new Date(Date.now() - 7_000),
+      },
     },
   });
-  assert.match(stripAnsi(renderProjectLine(ctx)), /\? rm -rf \/tmp/);
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /\? rm -rf \/tmp/);
+  assert.match(out, /\(waiting [67]s\)/, 'should include waiting counter rounded to whole seconds');
 });
 
 test('showPendingPermission=false hides the approve hint', () => {

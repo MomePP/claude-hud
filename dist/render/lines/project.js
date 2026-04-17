@@ -108,8 +108,9 @@ export function renderProjectLine(ctx) {
         parts.push(dim('∿ thinking'));
     }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
-        const target = ctx.transcript.pendingPermission.targetSummary;
-        parts.push(yellow(`? ${target}`));
+        const { targetSummary, timestamp } = ctx.transcript.pendingPermission;
+        const waitingSecs = Math.max(0, Math.round((Date.now() - timestamp.getTime()) / 1000));
+        parts.push(yellow(`? ${targetSummary} ${dim(`(waiting ${waitingSecs}s)`)}`));
     }
     if ((display?.showLastRequestTokens ?? false) && ctx.transcript.lastRequestTokenUsage) {
         parts.push(dim(formatLastRequestTokens(ctx.transcript.lastRequestTokenUsage)));

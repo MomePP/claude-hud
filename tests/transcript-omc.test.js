@@ -333,9 +333,11 @@ test('thinkingState.active decays to false on cache-hit after the recency window
   assert.equal(second.thinkingState.active, false, 'should remain inactive on cache hit');
 });
 
-test('pendingPermission is dropped on cache-hit once past the prompt window', async () => {
-  // Use a timestamp ~4s in the past — past PERMISSION_THRESHOLD_MS (3s).
-  const oldTimestamp = new Date(Date.now() - 4000).toISOString();
+test('pendingPermission persists past the old 3s window until tool_result lands', async () => {
+  // A tool_use from 10s ago with no tool_result: under the old heuristic this
+  // would have been dropped after 3s, but the honest behavior is to keep
+  // showing it because Claude is still blocked waiting on a result.
+  const oldTimestamp = new Date(Date.now() - 10_000).toISOString();
   const file = writeFixture([
     {
       timestamp: oldTimestamp,
@@ -344,21 +346,61 @@ test('pendingPermission is dropped on cache-hit once past the prompt window', as
         content: [
           {
             type: 'tool_use',
-            id: 'perm-stale',
+            id: 'perm-long',
             name: 'Bash',
-            input: { command: 'rm -rf /old' },
+            input: { command: 'npm install' },
           },
         ],
       },
     },
   ]);
 
-  // First call — seeds the cache; the entry is already stale so pendingPermission
-  // should be undefined immediately (finalizeTranscriptResult clears it).
   const first = await parseTranscript(file);
-  assert.equal(first.pendingPermission, undefined, 'stale permission should be dropped on first call');
+  assert.ok(first.pendingPermission, 'open tool_use should still surface as pending');
+  assert.equal(first.pendingPermission.toolName, 'Bash');
 
-  // Second call — cache hit. Must still return undefined.
+  // Cache hit: same entry should come back (decay was not applied).
   const second = await parseTranscript(file);
-  assert.equal(second.pendingPermission, undefined, 'stale permission should remain dropped on cache hit');
+  assert.ok(second.pendingPermission, 'cache-hit should preserve the pending entry');
+  assert.equal(second.pendingPermission.targetSummary, first.pendingPermission.targetSummary);
+});
+
+test('pendingPermission picks the youngest still-open entry when multiple exist', async () => {
+  const earlier = new Date(Date.now() - 20_000).toISOString();
+  const later = new Date(Date.now() - 5_000).toISOString();
+  const file = writeFixture([
+    {
+      timestamp: earlier,
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'perm-old',
+            name: 'Bash',
+            input: { command: 'sleep 60' },
+          },
+        ],
+      },
+    },
+    {
+      timestamp: later,
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'perm-new',
+            name: 'Edit',
+            input: { file_path: '/tmp/auth.ts' },
+          },
+        ],
+      },
+    },
+  ]);
+
+  const result = await parseTranscript(file);
+  assert.ok(result.pendingPermission, 'expected a pending permission entry');
+  assert.equal(result.pendingPermission.toolName, 'Edit', 'youngest entry should win');
+  assert.equal(result.pendingPermission.targetSummary, 'auth.ts');
 });
