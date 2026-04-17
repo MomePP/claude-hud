@@ -47,6 +47,9 @@ export const DEFAULT_CONFIG = {
         showMemoryUsage: false,
         showSessionTokens: false,
         showOutputStyle: false,
+        showThinkingIndicator: true,
+        showPendingPermission: true,
+        showLastRequestTokens: false,
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
         sevenDayThreshold: 80,
@@ -258,6 +261,15 @@ export function mergeConfig(userConfig) {
         showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
             ? migrated.display.showOutputStyle
             : DEFAULT_CONFIG.display.showOutputStyle,
+        showThinkingIndicator: typeof migrated.display?.showThinkingIndicator === 'boolean'
+            ? migrated.display.showThinkingIndicator
+            : DEFAULT_CONFIG.display.showThinkingIndicator,
+        showPendingPermission: typeof migrated.display?.showPendingPermission === 'boolean'
+            ? migrated.display.showPendingPermission
+            : DEFAULT_CONFIG.display.showPendingPermission,
+        showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
+            ? migrated.display.showLastRequestTokens
+            : DEFAULT_CONFIG.display.showLastRequestTokens,
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
             : DEFAULT_CONFIG.display.autocompactBuffer,

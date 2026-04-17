@@ -7,6 +7,24 @@ import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, 
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 
+function formatCompactCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1000)}k`;
+  return `${n}`;
+}
+
+function formatLastRequestTokens(
+  usage: NonNullable<import('../../types.js').TranscriptData['lastRequestTokenUsage']>
+): string {
+  const input = formatCompactCount(usage.inputTokens);
+  const output = formatCompactCount(usage.outputTokens);
+  const base = `last: ${input}→${output}`;
+  if (usage.reasoningTokens && usage.reasoningTokens > 0) {
+    return `${base} (+${formatCompactCount(usage.reasoningTokens)})`;
+  }
+  return base;
+}
+
 function hyperlink(uri: string, text: string): string {
   const esc = '\x1b';
   const st = '\\';
@@ -101,13 +119,17 @@ export function renderProjectLine(ctx: RenderContext): string | null {
     parts.push(costEstimate);
   }
 
-  if (ctx.transcript.thinkingState?.active) {
+  if ((display?.showThinkingIndicator ?? true) && ctx.transcript.thinkingState?.active) {
     parts.push(dim('∿ thinking'));
   }
 
-  if (ctx.transcript.pendingPermission) {
+  if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
     const target = ctx.transcript.pendingPermission.targetSummary;
     parts.push(yellow(`? ${target}`));
+  }
+
+  if ((display?.showLastRequestTokens ?? false) && ctx.transcript.lastRequestTokenUsage) {
+    parts.push(dim(formatLastRequestTokens(ctx.transcript.lastRequestTokenUsage)));
   }
 
   const customLine = display?.customLine;
