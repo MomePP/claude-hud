@@ -16,13 +16,14 @@ export function renderToolsLine(ctx: RenderContext): string | null {
 
   for (const tool of runningTools.slice(-2)) {
     const target = tool.target ? truncatePath(tool.target) : '';
-    parts.push(`${yellow('◐')} ${cyan(tool.name)}${target ? label(`: ${target}`, colors) : ''}`);
+    parts.push(`${yellow('◐')} ${cyan(formatToolName(tool.name))}${target ? label(`: ${target}`, colors) : ''}`);
   }
 
   const toolCounts = new Map<string, number>();
   for (const tool of completedTools) {
-    const count = toolCounts.get(tool.name) ?? 0;
-    toolCounts.set(tool.name, count + 1);
+    const displayName = formatToolName(tool.name);
+    const count = toolCounts.get(displayName) ?? 0;
+    toolCounts.set(displayName, count + 1);
   }
 
   const sortedTools = Array.from(toolCounts.entries())
@@ -38,6 +39,33 @@ export function renderToolsLine(ctx: RenderContext): string | null {
   }
 
   return parts.join(' | ');
+}
+
+// Claude Code MCP tool names arrive in two shapes:
+//   mcp__<server>__<fn>                       — standard MCP server
+//   mcp__plugin_<plugin>_<server>__<fn>       — plugin-provided MCP server
+// Both balloon the tools line. Compress to `<scope>:<fn>` where <scope> is
+// the plugin name when present (more recognizable to users — "claude-mem",
+// "context-mode", "oh-my-claudecode") and the raw server name otherwise.
+// Non-MCP tool names pass through unchanged.
+export function formatToolName(raw: string): string {
+  if (!raw.startsWith('mcp__')) return raw;
+  const rest = raw.slice('mcp__'.length);
+  const splitAt = rest.indexOf('__');
+  if (splitAt < 0) return raw;
+  const header = rest.slice(0, splitAt);
+  const fn = rest.slice(splitAt + 2);
+  if (!fn) return raw;
+
+  let scope: string;
+  if (header.startsWith('plugin_')) {
+    const segs = header.split('_').filter(Boolean);
+    // plugin_<plugin>_<server> — prefer the plugin identifier (segs[1]).
+    scope = segs[1] ?? header;
+  } else {
+    scope = header;
+  }
+  return `${scope}:${fn}`;
 }
 
 function truncatePath(path: string, maxLen: number = 20): string {
