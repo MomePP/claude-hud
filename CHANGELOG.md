@@ -4,6 +4,8 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-17 — MomePP fork
+
 ### Changed
 - MCP tool names in the tools line now compress to `<plugin>:<fn>` (e.g.
   `mcp__plugin_context-mode_context-mode__ctx_execute` →
