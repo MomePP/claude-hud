@@ -1,70 +1,50 @@
-# Claude HUD
+# Claude HUD — MomePP fork
 
 A Claude Code plugin that shows what's happening — context usage, active tools, running agents, and todo progress. Always visible below your input.
 
-[![License](https://img.shields.io/github/license/jarrodwatts/claude-hud?v=2)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/jarrodwatts/claude-hud)](https://github.com/jarrodwatts/claude-hud/stargazers)
+**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC) and my own workflow. If you're looking for the upstream, go there — this one is deliberately narrower in scope.
 
 ![Claude HUD in action](claude-hud-preview-5-2.png)
 
+## Why this fork exists
+
+| What upstream does | What this fork does |
+|---|---|
+| Displays `unknown` when an Agent tool call omits `subagent_type` | Falls back to the caller-supplied `name`, then `general-purpose` (the actual Claude Code default) |
+| Doesn't understand OMC's `proxy_Edit` / `proxy_Task` / etc. | Strips `proxy_` and routes them identically to native tools |
+| Leaves background (`run_in_background`) agents stuck as "running" forever | Parses `<task-notification>` blocks to mark them completed |
+| Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long session perf win) |
+| Cross-platform (darwin / linux / win32 / powershell) | **macOS/Linux only** — Windows branches removed from setup |
+| CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
+| Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships a launcher at `scripts/claude-hud.sh`; `settings.json` just points at it |
+| Agent labels render as `oh-my-claudecode:explore` | Strips the `namespace:` prefix and capitalizes — shows as `Explore` |
+| — | Thinking-state and pending-permission indicators on the project line |
+
+## Limitations
+
+- **macOS / Linux only.** No Windows support — setup.md and CI paths for `win32` / PowerShell were removed. The source still tolerates `process.platform === 'win32'` incidentally (for case-insensitive path compares), but nothing is tested there.
+- **No automated CI.** Tests and builds run locally. Dependency bumps won't be auto-gated; you're on your own to verify.
+- **Remember to rebuild.** `dist/` is tracked — run `npm run build` before committing source changes so the shipped bundle stays in sync.
+- **Upstream drift.** I cherry-pick upstream changes occasionally; this is not a live mirror.
+
 ## Install
 
-Inside a Claude Code instance, run the following commands:
-
-**Step 1: Add the marketplace**
 ```
-/plugin marketplace add jarrodwatts/claude-hud
-```
-
-**Step 2: Install the plugin**
-
-<details>
-<summary><strong>⚠️ Linux users: Click here first</strong></summary>
-
-On Linux, `/tmp` is often a separate filesystem (tmpfs), which causes plugin installation to fail with:
-```
-EXDEV: cross-device link not permitted
+/plugin marketplace add MomePP/claude-hud
+/plugin install claude-hud
+/reload-plugins
+/claude-hud:setup
 ```
 
-**Fix**: Set TMPDIR before installing:
+Then quit Claude Code and relaunch so the new `statusLine` config takes effect.
+
+Linux users: if the install fails with `EXDEV: cross-device link not permitted`, set `TMPDIR` to a path on the same filesystem as your home directory before installing:
+
 ```bash
 mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 ```
 
-Then run the install command below in that session. This is a [Claude Code platform limitation](https://github.com/anthropics/claude-code/issues/14799).
-
-</details>
-
-```
-/plugin install claude-hud
-```
-
-After that, reload plugins:
-
-```
-/reload-plugins
-```
-
-
-**Step 3: Configure the statusline**
-```
-/claude-hud:setup
-```
-
-<details>
-<summary><strong>⚠️ Windows users: Click here if setup says no JavaScript runtime was found</strong></summary>
-
-On Windows, Node.js LTS is the recommended runtime for Claude HUD. If setup says no JavaScript runtime was found, install Node.js for your shell first:
-```powershell
-winget install OpenJS.NodeJS.LTS
-```
-Then restart your shell and run `/claude-hud:setup` again.
-
-</details>
-
-Done! Restart Claude Code to load the new statusLine config, then the HUD will appear.
-
-On Windows, make that a full Claude Code restart after setup writes the new `statusLine` config.
+This is a [Claude Code platform limitation](https://github.com/anthropics/claude-code/issues/14799).
 
 ---
 
@@ -305,29 +285,36 @@ To disable, set `display.showUsage` to `false`.
 ## Requirements
 
 - Claude Code v1.0.80+
-- Node.js 18+ or Bun
+- Node.js 18+ (macOS/Linux)
 
 ---
 
 ## Development
 
 ```bash
-git clone https://github.com/jarrodwatts/claude-hud
+git clone https://github.com/MomePP/claude-hud
 cd claude-hud
 npm ci && npm run build
 npm test
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+After changing anything in `src/`, rebuild and commit `dist/` alongside the source — there's no CI that will do it for you.
+
+### OMC-specific tests
+
+The parser-behavior tests for OMC compatibility (proxy_ stripping, agent fallback, background-agent completion, tail-parsing) live in `tests/transcript-omc.test.js`. Run them on their own:
+
+```bash
+node --test tests/transcript-omc.test.js
+```
 
 ---
+
+## Credit
+
+All of the HUD rendering, configuration flow, preset logic, and design choices come from
+[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of OMC-specific fixes and perf tweaks on top.
 
 ## License
 
 MIT — see [LICENSE](LICENSE)
-
----
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=jarrodwatts/claude-hud&type=Date)](https://star-history.com/#jarrodwatts/claude-hud&Date)
