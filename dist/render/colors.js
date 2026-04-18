@@ -86,6 +86,9 @@ export function label(text, colors) {
 export function custom(text, colors) {
     return withOverride(text, colors?.custom, CLAUDE_ORANGE);
 }
+export function thinking(text, colors) {
+    return withOverride(text, colors?.thinking, DIM);
+}
 export function warning(text, colors) {
     return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }

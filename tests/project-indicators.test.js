@@ -35,6 +35,55 @@ test('thinking indicator defaults to on and renders when active', () => {
   assert.match(stripAnsi(renderProjectLine(ctx)), /∿ thinking/);
 });
 
+test('thinking indicator uses dim color by default', () => {
+  const ctx = baseCtx({
+    transcript: { thinkingState: { active: true, lastSeen: new Date() } },
+  });
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[2m∿ thinking\x1b\[0m/, 'expected dim ANSI wrap');
+});
+
+test('colors.thinking override applies to the indicator (256-color number)', () => {
+  const ctx = baseCtx({
+    transcript: { thinkingState: { active: true, lastSeen: new Date() } },
+    config: mergeConfig({ colors: { thinking: 217 } }),
+  });
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[38;5;217m∿ thinking\x1b\[0m/, 'expected 256-color 217 ANSI wrap');
+});
+
+test('colors.thinking override accepts hex values', () => {
+  const ctx = baseCtx({
+    transcript: { thinkingState: { active: true, lastSeen: new Date() } },
+    config: mergeConfig({ colors: { thinking: '#ff8800' } }),
+  });
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[38;2;255;136;0m∿ thinking\x1b\[0m/, 'expected truecolor ANSI from hex');
+});
+
+test('natural mode colors the project glyph with the project color', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural', projectGlyph: '\uf114' },
+      colors: { project: 'cyan' },
+    }),
+  });
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[36m\uf114\x1b\[0m/, 'project glyph should be wrapped in projectColor');
+});
+
+test('natural mode colors the branch glyph with the gitBranch color', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural', branchGlyph: '\ue725' },
+      colors: { gitBranch: 'brightMagenta' },
+    }),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: false, ahead: 0, behind: 0 };
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[95m\ue725\x1b\[0m/, 'branch glyph should be wrapped in gitBranchColor');
+});
+
 test('showThinkingIndicator=false hides the indicator even when active', () => {
   const ctx = baseCtx({
     transcript: { thinkingState: { active: true, lastSeen: new Date() } },

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor } from '../colors.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 function formatCompactCount(n) {
@@ -61,7 +61,7 @@ function buildExtras(ctx) {
         extras.push(costEstimate);
     }
     if ((display?.showThinkingIndicator ?? true) && ctx.transcript.thinkingState?.active) {
-        extras.push(dim('∿ thinking'));
+        extras.push(thinkingColor('∿ thinking', colors));
     }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
         const { targetSummary, timestamp } = ctx.transcript.pendingPermission;
@@ -143,7 +143,7 @@ function renderNaturalProjectLine(ctx) {
         if (projectPath) {
             const linked = hyperlink(`file://${ctx.stdin.cwd}`, projectColor(projectPath, colors));
             const projectGlyph = display?.projectGlyph ?? '';
-            const projectGlyphPart = projectGlyph ? `${projectGlyph} ` : '';
+            const projectGlyphPart = projectGlyph ? `${projectColor(projectGlyph, colors)} ` : '';
             coreSegments.push(`${dim('in')} ${projectGlyphPart}${linked}`);
         }
     }
@@ -154,7 +154,7 @@ function renderNaturalProjectLine(ctx) {
         const coloredBranch = gitBranchColor(branchText, colors);
         const linkedBranch = ctx.gitStatus.branchUrl ? hyperlink(ctx.gitStatus.branchUrl, coloredBranch) : coloredBranch;
         const branchGlyph = display?.branchGlyph ?? '';
-        const branchGlyphPart = branchGlyph ? `${branchGlyph} ` : '';
+        const branchGlyphPart = branchGlyph ? `${gitBranchColor(branchGlyph, colors)} ` : '';
         const gitTokens = [`${dim('on')} ${branchGlyphPart}${linkedBranch}`];
         if (gitConfig?.showAheadBehind) {
             if (ctx.gitStatus.ahead > 0)

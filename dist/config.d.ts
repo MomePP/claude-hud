@@ -28,6 +28,7 @@ export interface HudColorOverrides {
     gitBranch: HudColorValue;
     label: HudColorValue;
     custom: HudColorValue;
+    thinking: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export interface HudConfig {

@@ -45,6 +45,7 @@ export interface HudColorOverrides {
   gitBranch: HudColorValue;
   label: HudColorValue;
   custom: HudColorValue;
+  thinking: HudColorValue;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -181,6 +182,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     gitBranch: 'brightMagenta',
     label: 'dim',
     custom: 208,
+    thinking: 'dim',
   },
 };
 
@@ -493,6 +495,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     custom: validateColorValue(migrated.colors?.custom)
       ? migrated.colors.custom
       : DEFAULT_CONFIG.colors.custom,
+    thinking: validateColorValue(migrated.colors?.thinking)
+      ? migrated.colors.thinking
+      : DEFAULT_CONFIG.colors.thinking,
   };
 
   return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };

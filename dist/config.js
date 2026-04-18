@@ -78,6 +78,7 @@ export const DEFAULT_CONFIG = {
         gitBranch: 'brightMagenta',
         label: 'dim',
         custom: 208,
+        thinking: 'dim',
     },
 };
 export function getConfigPath() {
@@ -364,6 +365,9 @@ export function mergeConfig(userConfig) {
         custom: validateColorValue(migrated.colors?.custom)
             ? migrated.colors.custom
             : DEFAULT_CONFIG.colors.custom,
+        thinking: validateColorValue(migrated.colors?.thinking)
+            ? migrated.colors.thinking
+            : DEFAULT_CONFIG.colors.thinking,
     };
     return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };
 }

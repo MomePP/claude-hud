@@ -182,6 +182,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `colors.gitBranch` | color value | `brightMagenta` | Color for the git branch and branch status text. Default matches starship `git_branch` (bold purple). |
 | `colors.label` | color value | `dim` | Color for labels and secondary metadata such as `Context`, `Usage`, counts, and progress text |
 | `colors.custom` | color value | `208` | Color for the optional custom line |
+| `colors.thinking` | color value | `dim` | Color for the inline `∿ thinking` indicator (defaults to dim so it stays out of the way; override with any named color, 256-color number, or hex). |
 
 Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brightBlue`, `brightMagenta`. You can also use a 256-color number (`0-255`) or hex (`#rrggbb`).
 
