@@ -4,6 +4,35 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-19 — MomePP fork
+
+### Added
+- Three new glyph toggles for the `natural` project style and the duration
+  extra:
+  - `display.projectGlyph` (default `\uf114` `nf-fa-folder_o`, outlined
+    folder) — renders between `in` and the project name.
+  - `display.branchGlyph` (default `\ue725` `nf-dev-git_branch`) — renders
+    between `on` and the branch name.
+  - `display.durationGlyph` (default `\uf017` `nf-fa-clock_o`) — replaces the
+    legacy `⏱️` emoji on the duration extra in both `pipes` and `natural`
+    project styles.
+  Each accepts any string; set to `""` to disable.
+- `display.barStyle` (default `block`) controls the character set used for
+  context, usage, and memory bars. `block` = `█░` (current), `square` = `▰▱`
+  (modern, starship-like), `thin` = `━─` (minimal).
+
+### Changed
+- Default color palette aligned to starship's defaults so the model, project,
+  and branch each get a distinct color out of the box:
+  - `colors.model`: `cyan` → `green` (matches starship runtime/version
+    modules).
+  - `colors.project`: `yellow` → `cyan` (matches starship `directory`).
+  - `colors.gitBranch`: `cyan` → `brightMagenta` (matches starship
+    `git_branch` bold purple).
+  Existing user `colors.*` overrides keep working unchanged.
+- Duration extra now renders `\uf017 1h 30m` instead of `⏱️  1h 30m`. Set
+  `display.durationGlyph` to `"⏱️ "` to restore the emoji.
+
 ## [0.1.2] - 2026-04-19 — MomePP fork
 
 ### Added
