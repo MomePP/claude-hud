@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Personal fork of claude-hud — OMC-compatible, darwin/linux only, built-in launcher script",
-    "version": "0.1.4"
+    "version": "0.1.5"
   },
   "plugins": [
     {

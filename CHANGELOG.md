@@ -4,6 +4,20 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-19 — MomePP fork
+
+### Added
+- `colors.thinking` (default `dim`) — overrides the color of the inline
+  `∿ thinking` indicator. Accepts the same value space as the other color
+  fields (named ANSI, 256-color number, or `#rrggbb` hex).
+
+### Fixed
+- In the `natural` project style, `display.projectGlyph` and
+  `display.branchGlyph` now render in their respective module colors
+  (`colors.project` and `colors.gitBranch`) instead of the terminal's
+  default foreground. This matches the `display.modelGlyph` behavior and
+  keeps each section visually grouped.
+
 ## [0.1.4] - 2026-04-19 — MomePP fork
 
 ### Added
