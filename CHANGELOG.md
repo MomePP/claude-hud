@@ -4,6 +4,17 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-19 — MomePP fork
+
+### Added
+- Four additional values for `display.barStyle`:
+  - `vertical` (`▮▯`, U+25AE/U+25AF) — recognizable progress-bar look.
+  - `dots` (`●○`, U+25CF/U+25CB) — distinctive circle progress.
+  - `shade` (`▓░`, U+2593/U+2591) — soft gradient, easier on the eyes.
+  - `double` (`═─`, U+2550/U+2500) — double-line tracks.
+  All seven values now share the same fallback path, so unknown values still
+  render as `block`.
+
 ## [0.1.3] - 2026-04-19 — MomePP fork
 
 ### Added
