@@ -18,6 +18,7 @@ export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin';
 export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
@@ -107,6 +108,10 @@ export interface HudConfig {
     projectStyle: ProjectStyleMode;
     naturalSeparator: string;
     modelGlyph: string;
+    projectGlyph: string;
+    branchGlyph: string;
+    durationGlyph: string;
+    barStyle: BarStyleMode;
   };
   colors: HudColorOverrides;
 }
@@ -159,6 +164,10 @@ export const DEFAULT_CONFIG: HudConfig = {
     projectStyle: 'pipes',
     naturalSeparator: ' · ',
     modelGlyph: '\uec10',
+    projectGlyph: '\uf114',
+    branchGlyph: '\ue725',
+    durationGlyph: '\uf017',
+    barStyle: 'block',
   },
   colors: {
     context: 'green',
@@ -166,10 +175,10 @@ export const DEFAULT_CONFIG: HudConfig = {
     warning: 'yellow',
     usageWarning: 'brightMagenta',
     critical: 'red',
-    model: 'cyan',
-    project: 'yellow',
+    model: 'green',
+    project: 'cyan',
     git: 'magenta',
-    gitBranch: 'cyan',
+    gitBranch: 'brightMagenta',
     label: 'dim',
     custom: 208,
   },
@@ -206,6 +215,10 @@ function validateModelFormat(value: unknown): value is ModelFormatMode {
 
 function validateProjectStyle(value: unknown): value is ProjectStyleMode {
   return value === 'pipes' || value === 'natural';
+}
+
+function validateBarStyle(value: unknown): value is BarStyleMode {
+  return value === 'block' || value === 'square' || value === 'thin';
 }
 
 function validateColorName(value: unknown): value is HudColorName {
@@ -426,6 +439,18 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     modelGlyph: typeof migrated.display?.modelGlyph === 'string'
       ? migrated.display.modelGlyph.slice(0, 8)
       : DEFAULT_CONFIG.display.modelGlyph,
+    projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+      ? migrated.display.projectGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.projectGlyph,
+    branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+      ? migrated.display.branchGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.branchGlyph,
+    durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+      ? migrated.display.durationGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.durationGlyph,
+    barStyle: validateBarStyle(migrated.display?.barStyle)
+      ? migrated.display.barStyle
+      : DEFAULT_CONFIG.display.barStyle,
   };
 
   const colors = {

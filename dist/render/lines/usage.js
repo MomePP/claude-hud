@@ -32,6 +32,7 @@ export function renderUsageLine(ctx) {
     const usageBarEnabled = display?.usageBarEnabled ?? true;
     const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
     const barWidth = getAdaptiveBarWidth();
+    const barStyle = display?.barStyle;
     if (fiveHour === null && sevenDay !== null) {
         const weeklyOnlyPart = formatUsageWindowPart({
             label: t("label.weekly"),
@@ -40,6 +41,7 @@ export function renderUsageLine(ctx) {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
             forceLabel: true,
         });
         return `${usageLabel} ${weeklyOnlyPart}`;
@@ -51,6 +53,7 @@ export function renderUsageLine(ctx) {
         colors,
         usageBarEnabled,
         barWidth,
+        barStyle,
     });
     if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
         const sevenDayPart = formatUsageWindowPart({
@@ -60,6 +63,7 @@ export function renderUsageLine(ctx) {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
             forceLabel: true,
         });
         return `${usageLabel} ${fiveHourPart} | ${sevenDayPart}`;
@@ -73,14 +77,14 @@ function formatUsagePercent(percent, colors) {
     const color = getQuotaColor(percent, colors);
     return `${color}${percent}%${RESET}`;
 }
-function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, forceLabel = false, }) {
+function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, barStyle, forceLabel = false, }) {
     const usageDisplay = formatUsagePercent(percent, colors);
     const reset = formatResetTime(resetAt);
     const styledLabel = label(windowLabel, colors);
     if (usageBarEnabled) {
         const body = reset
-            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+            ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
+            : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
         return forceLabel ? `${styledLabel} ${body}` : body;
     }
     return reset

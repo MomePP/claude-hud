@@ -20,10 +20,10 @@ export function renderSessionLine(ctx) {
         console.error(`[claude-hud:context] autocompactBuffer=disabled, showing raw ${rawPercent}% (buffered would be ${bufferedPercent}%)`);
     }
     const colors = ctx.config?.colors;
-    const barWidth = getAdaptiveBarWidth();
-    const bar = coloredBar(percent, barWidth, colors);
-    const parts = [];
     const display = ctx.config?.display;
+    const barWidth = getAdaptiveBarWidth();
+    const bar = coloredBar(percent, barWidth, colors, display?.barStyle);
+    const parts = [];
     const contextValueMode = display?.contextValue ?? 'percent';
     const contextValue = formatContextValue(ctx, percent, contextValueMode);
     const contextValueDisplay = `${getContextColor(percent, colors)}${contextValue}${RESET}`;
@@ -140,6 +140,7 @@ export function renderSessionLine(ctx) {
             const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
             if (effectiveUsage >= usageThreshold) {
                 const usageBarEnabled = display?.usageBarEnabled ?? true;
+                const barStyle = display?.barStyle;
                 if (fiveHour === null && sevenDay !== null) {
                     const weeklyOnlyPart = formatUsageWindowPart({
                         label: t('label.weekly'),
@@ -148,6 +149,7 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        barStyle,
                         forceLabel: true,
                     });
                     parts.push(weeklyOnlyPart);
@@ -160,6 +162,7 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        barStyle,
                     });
                     const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
                     if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
@@ -170,6 +173,7 @@ export function renderSessionLine(ctx) {
                             colors,
                             usageBarEnabled,
                             barWidth,
+                            barStyle,
                             forceLabel: true,
                         });
                         parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
@@ -198,7 +202,9 @@ export function renderSessionLine(ctx) {
         }
     }
     if (display?.showDuration !== false && ctx.sessionDuration) {
-        parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
+        const durationGlyph = display?.durationGlyph ?? '';
+        const durationText = durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration;
+        parts.push(label(durationText, colors));
     }
     const costEstimate = renderCostEstimate(ctx);
     if (costEstimate) {
@@ -260,14 +266,14 @@ function formatUsagePercent(percent, colors) {
     const color = getQuotaColor(percent, colors);
     return `${color}${percent}%${RESET}`;
 }
-function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, forceLabel = false, }) {
+function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, barStyle, forceLabel = false, }) {
     const usageDisplay = formatUsagePercent(percent, colors);
     const reset = formatResetTime(resetAt);
     const styledLabel = label(windowLabel, colors);
     if (usageBarEnabled) {
         const body = reset
-            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${reset} / ${windowLabel})`
-            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+            ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${reset} / ${windowLabel})`
+            : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
         return forceLabel ? `${styledLabel} ${body}` : body;
     }
     return reset

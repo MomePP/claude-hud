@@ -61,6 +61,10 @@ export const DEFAULT_CONFIG = {
         projectStyle: 'pipes',
         naturalSeparator: ' · ',
         modelGlyph: '\uec10',
+        projectGlyph: '\uf114',
+        branchGlyph: '\ue725',
+        durationGlyph: '\uf017',
+        barStyle: 'block',
     },
     colors: {
         context: 'green',
@@ -68,10 +72,10 @@ export const DEFAULT_CONFIG = {
         warning: 'yellow',
         usageWarning: 'brightMagenta',
         critical: 'red',
-        model: 'cyan',
-        project: 'yellow',
+        model: 'green',
+        project: 'cyan',
         git: 'magenta',
-        gitBranch: 'cyan',
+        gitBranch: 'brightMagenta',
         label: 'dim',
         custom: 208,
     },
@@ -100,6 +104,9 @@ function validateModelFormat(value) {
 }
 function validateProjectStyle(value) {
     return value === 'pipes' || value === 'natural';
+}
+function validateBarStyle(value) {
+    return value === 'block' || value === 'square' || value === 'thin';
 }
 function validateColorName(value) {
     return value === 'dim'
@@ -304,6 +311,18 @@ export function mergeConfig(userConfig) {
         modelGlyph: typeof migrated.display?.modelGlyph === 'string'
             ? migrated.display.modelGlyph.slice(0, 8)
             : DEFAULT_CONFIG.display.modelGlyph,
+        projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+            ? migrated.display.projectGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.projectGlyph,
+        branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+            ? migrated.display.branchGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.branchGlyph,
+        durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+            ? migrated.display.durationGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.durationGlyph,
+        barStyle: validateBarStyle(migrated.display?.barStyle)
+            ? migrated.display.barStyle
+            : DEFAULT_CONFIG.display.barStyle,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)

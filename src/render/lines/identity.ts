@@ -31,7 +31,7 @@ export function renderIdentityLine(ctx: RenderContext): string {
 
   let line =
     display?.showContextBar !== false
-      ? `${label(t("label.context"), colors)} ${coloredBar(percent, getAdaptiveBarWidth(), colors)} ${contextValueDisplay}`
+      ? `${label(t("label.context"), colors)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, display?.barStyle)} ${contextValueDisplay}`
       : `${label(t("label.context"), colors)} ${contextValueDisplay}`;
 
   if (display?.showTokenBreakdown !== false && percent >= 85) {

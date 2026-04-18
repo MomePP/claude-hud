@@ -52,7 +52,9 @@ function buildExtras(ctx) {
         }
     }
     if (display?.showDuration !== false && ctx.sessionDuration) {
-        extras.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
+        const durationGlyph = display?.durationGlyph ?? '';
+        const durationText = durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration;
+        extras.push(label(durationText, colors));
     }
     const costEstimate = renderCostEstimate(ctx);
     if (costEstimate) {
@@ -140,7 +142,9 @@ function renderNaturalProjectLine(ctx) {
         const projectPath = getProjectPath(ctx.stdin.cwd, ctx.config?.pathLevels ?? 1);
         if (projectPath) {
             const linked = hyperlink(`file://${ctx.stdin.cwd}`, projectColor(projectPath, colors));
-            coreSegments.push(`${dim('in')} ${linked}`);
+            const projectGlyph = display?.projectGlyph ?? '';
+            const projectGlyphPart = projectGlyph ? `${projectGlyph} ` : '';
+            coreSegments.push(`${dim('in')} ${projectGlyphPart}${linked}`);
         }
     }
     const gitConfig = ctx.config?.gitStatus;
@@ -149,7 +153,9 @@ function renderNaturalProjectLine(ctx) {
         const branchText = ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
         const linkedBranch = ctx.gitStatus.branchUrl ? hyperlink(ctx.gitStatus.branchUrl, coloredBranch) : coloredBranch;
-        const gitTokens = [`${dim('on')} ${linkedBranch}`];
+        const branchGlyph = display?.branchGlyph ?? '';
+        const branchGlyphPart = branchGlyph ? `${branchGlyph} ` : '';
+        const gitTokens = [`${dim('on')} ${branchGlyphPart}${linkedBranch}`];
         if (gitConfig?.showAheadBehind) {
             if (ctx.gitStatus.ahead > 0)
                 gitTokens.push(formatAheadCount(ctx.gitStatus.ahead, gitConfig, colors));

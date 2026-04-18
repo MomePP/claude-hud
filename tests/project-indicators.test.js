@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { renderProjectLine, renderGitFilesLine } from '../dist/render/lines/project.js';
+import { coloredBar, quotaBar } from '../dist/render/colors.js';
 import { DEFAULT_CONFIG, mergeConfig } from '../dist/config.js';
 
 function stripAnsi(s) {
@@ -105,6 +106,95 @@ test('DEFAULT_CONFIG ships natural-mode toggles and file-list split with expecte
   assert.equal(DEFAULT_CONFIG.gitStatus.showFileList, false);
 });
 
+test('DEFAULT_CONFIG ships project/branch/duration glyphs and barStyle with expected defaults', () => {
+  assert.equal(DEFAULT_CONFIG.display.projectGlyph, '\uf114');
+  assert.equal(DEFAULT_CONFIG.display.branchGlyph, '\ue725');
+  assert.equal(DEFAULT_CONFIG.display.durationGlyph, '\uf017');
+  assert.equal(DEFAULT_CONFIG.display.barStyle, 'block');
+});
+
+test('natural mode renders default project and branch glyphs alongside in/on prepositions', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { projectStyle: 'natural' } }),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: false, ahead: 0, behind: 0 };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /in \uf114 my-project/, 'project glyph should sit between "in" and project name');
+  assert.match(out, /on \ue725 main/, 'branch glyph should sit between "on" and branch name');
+});
+
+test('natural mode honors custom projectGlyph and branchGlyph values', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural', projectGlyph: '\uf115', branchGlyph: '\uf126' },
+    }),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: false, ahead: 0, behind: 0 };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /in \uf115 my-project/);
+  assert.match(out, /on \uf126 main/);
+});
+
+test('natural mode omits glyphs when project/branch glyph is empty string', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural', projectGlyph: '', branchGlyph: '' },
+    }),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: false, ahead: 0, behind: 0 };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /in my-project/);
+  assert.match(out, /on main/);
+  assert.doesNotMatch(out, /\uf114/);
+  assert.doesNotMatch(out, /\ue725/);
+});
+
+test('duration glyph defaults to NF clock and replaces the legacy stopwatch emoji', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { showDuration: true } }),
+  });
+  ctx.sessionDuration = '1h 30m';
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /\uf017 1h 30m/, 'expected NF clock glyph before duration');
+  assert.doesNotMatch(out, /\u23F1/, 'should not include the stopwatch emoji');
+});
+
+test('barStyle defaults to "block" and uses U+2588 / U+2591 characters', () => {
+  const out = stripAnsi(coloredBar(50, 6));
+  assert.match(out, /\u2588{3}\u2591{3}/, 'block style should fill 3/6 with U+2588 and 3/6 with U+2591');
+});
+
+test('barStyle "square" swaps to U+25B0 / U+25B1', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'square'));
+  assert.match(out, /\u25B0{3}\u25B1{3}/);
+});
+
+test('barStyle "thin" swaps to U+2501 / U+2500', () => {
+  const out = stripAnsi(quotaBar(50, 6, undefined, 'thin'));
+  assert.match(out, /\u2501{3}\u2500{3}/);
+});
+
+test('unknown barStyle falls back to block', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'mystery'));
+  assert.match(out, /\u2588{3}\u2591{3}/);
+});
+
+test('durationGlyph is configurable and can be disabled with empty string', () => {
+  const ctxEmoji = baseCtx({
+    config: mergeConfig({ display: { showDuration: true, durationGlyph: '\u23F1\uFE0F ' } }),
+  });
+  ctxEmoji.sessionDuration = '5m';
+  assert.match(stripAnsi(renderProjectLine(ctxEmoji)), /\u23F1\uFE0F  5m/);
+
+  const ctxNone = baseCtx({
+    config: mergeConfig({ display: { showDuration: true, durationGlyph: '' } }),
+  });
+  ctxNone.sessionDuration = '5m';
+  const out = stripAnsi(renderProjectLine(ctxNone));
+  assert.match(out, /5m/);
+  assert.doesNotMatch(out, /\uf017/);
+});
+
 test('pipes mode (default) keeps the [model] brackets and \u2502 separator', () => {
   const ctx = baseCtx({
     config: mergeConfig({}),
@@ -118,7 +208,7 @@ test('pipes mode (default) keeps the [model] brackets and \u2502 separator', () 
 
 test('natural mode drops [] brackets and uses in/on prepositions', () => {
   const ctx = baseCtx({
-    config: mergeConfig({ display: { projectStyle: 'natural' } }),
+    config: mergeConfig({ display: { projectStyle: 'natural', projectGlyph: '', branchGlyph: '' } }),
   });
   ctx.gitStatus = { branch: 'main', isDirty: true, ahead: 0, behind: 0 };
   const out = stripAnsi(renderProjectLine(ctx));
@@ -189,7 +279,7 @@ test('showFileStats inline counter renders in pipes mode without bottom file lis
 test('showFileStats inline counter renders in natural mode without bottom file list', () => {
   const ctx = baseCtx({
     config: mergeConfig({
-      display: { projectStyle: 'natural' },
+      display: { projectStyle: 'natural', branchGlyph: '' },
       gitStatus: { showFileStats: true, showFileList: false },
     }),
   });

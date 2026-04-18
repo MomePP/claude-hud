@@ -167,15 +167,19 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.projectStyle` | `pipes` \| `natural` | `pipes` | Project-line layout. `pipes` keeps the classic `[Opus] │ project git:(branch)` shape. `natural` switches to a starship-style `<glyph> Opus in project on branch` prose layout, drops `[]` brackets and `git:( )` wrappers, and uses `display.naturalSeparator` between segments. |
 | `display.naturalSeparator` | string (≤8 chars) | ` · ` | Separator inserted between sections in `natural` project style (and between Context/Usage when they share a line in expanded layout). Examples: `" · "`, `" | "`, `" "`, `"  "`. |
 | `display.modelGlyph` | string (≤8 chars) | `` (Nerd Font sparkle `nf-cod-sparkle`, U+EC10) | Glyph rendered immediately before the model name in `natural` project style. Set to `""` to disable. Pick a glyph that exists in your terminal font — older Nerd Font patches without the codicon block won't show U+EBxx/ECxx; FontAwesome range (U+F000–U+F2E0) is the safest fallback (try `` U+F0D0 wand or `` U+F2DC snowflake). |
+| `display.projectGlyph` | string (≤8 chars) | `` (Nerd Font outlined folder `nf-fa-folder_o`, U+F114) | Glyph rendered between `in` and the project name in `natural` project style. Set to `""` to disable. Try `` U+F07B filled folder, `` U+F115 open-folder, or `` U+EB83 codicon-folder. |
+| `display.branchGlyph` | string (≤8 chars) | `` (Nerd Font git-branch `nf-dev-git_branch`, U+E725) | Glyph rendered between `on` and the branch name in `natural` project style. Set to `""` to disable. Try `` U+F126 FontAwesome code-branch as a more widely-supported fallback. |
+| `display.durationGlyph` | string (≤8 chars) | `` (Nerd Font clock `nf-fa-clock_o`, U+F017) | Glyph rendered before the session-duration value (replaces the legacy ⏱️ emoji). Applies to both `pipes` and `natural` modes. Set to `""` to drop the glyph entirely, or set to `⏱️ ` to keep the emoji. |
+| `display.barStyle` | `block` \| `square` \| `thin` | `block` | Character set for context, usage, and memory bars. `block` = `█░` (default, dense), `square` = `▰▱` (modern, starship-like), `thin` = `━─` (minimal, single line). |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
 | `colors.usageWarning` | color value | `brightMagenta` | Warning color for usage bars and percentages near their threshold |
 | `colors.critical` | color value | `red` | Critical color for limit-reached states and critical thresholds |
-| `colors.model` | color value | `cyan` | Color for the model badge such as `[Opus]` |
-| `colors.project` | color value | `yellow` | Color for the project path |
+| `colors.model` | color value | `green` | Color for the model badge such as `[Opus]`. Default mirrors starship runtime/version modules so model, project, and branch each get a distinct color. |
+| `colors.project` | color value | `cyan` | Color for the project path. Default matches starship `directory`. |
 | `colors.git` | color value | `magenta` | Color for git wrapper text such as `git:(` and `)` |
-| `colors.gitBranch` | color value | `cyan` | Color for the git branch and branch status text |
+| `colors.gitBranch` | color value | `brightMagenta` | Color for the git branch and branch status text. Default matches starship `git_branch` (bold purple). |
 | `colors.label` | color value | `dim` | Color for labels and secondary metadata such as `Context`, `Usage`, counts, and progress text |
 | `colors.custom` | color value | `208` | Color for the optional custom line |
 

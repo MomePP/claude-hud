@@ -11,6 +11,7 @@ export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin';
 export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -77,6 +78,10 @@ export interface HudConfig {
         projectStyle: ProjectStyleMode;
         naturalSeparator: string;
         modelGlyph: string;
+        projectGlyph: string;
+        branchGlyph: string;
+        durationGlyph: string;
+        barStyle: BarStyleMode;
     };
     colors: HudColorOverrides;
 }

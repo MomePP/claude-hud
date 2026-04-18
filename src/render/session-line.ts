@@ -26,11 +26,11 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   const colors = ctx.config?.colors;
+  const display = ctx.config?.display;
   const barWidth = getAdaptiveBarWidth();
-  const bar = coloredBar(percent, barWidth, colors);
+  const bar = coloredBar(percent, barWidth, colors, display?.barStyle);
 
   const parts: string[] = [];
-  const display = ctx.config?.display;
   const contextValueMode = display?.contextValue ?? 'percent';
   const contextValue = formatContextValue(ctx, percent, contextValueMode);
   const contextValueDisplay = `${getContextColor(percent, colors)}${contextValue}${RESET}`;
@@ -156,6 +156,7 @@ export function renderSessionLine(ctx: RenderContext): string {
 
       if (effectiveUsage >= usageThreshold) {
         const usageBarEnabled = display?.usageBarEnabled ?? true;
+        const barStyle = display?.barStyle;
         if (fiveHour === null && sevenDay !== null) {
           const weeklyOnlyPart = formatUsageWindowPart({
             label: t('label.weekly'),
@@ -164,6 +165,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
             forceLabel: true,
           });
           parts.push(weeklyOnlyPart);
@@ -175,6 +177,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
           });
 
           const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
@@ -186,6 +189,7 @@ export function renderSessionLine(ctx: RenderContext): string {
               colors,
               usageBarEnabled,
               barWidth,
+              barStyle,
               forceLabel: true,
             });
             parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
@@ -216,7 +220,9 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   if (display?.showDuration !== false && ctx.sessionDuration) {
-    parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
+    const durationGlyph = display?.durationGlyph ?? '';
+    const durationText = durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration;
+    parts.push(label(durationText, colors));
   }
 
   const costEstimate = renderCostEstimate(ctx);
@@ -299,6 +305,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   forceLabel = false,
 }: {
   label: string;
@@ -307,6 +314,7 @@ function formatUsageWindowPart({
   colors?: RenderContext['config']['colors'];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin';
   forceLabel?: boolean;
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);
@@ -315,8 +323,8 @@ function formatUsageWindowPart({
 
   if (usageBarEnabled) {
     const body = reset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${reset} / ${windowLabel})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${reset} / ${windowLabel})`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

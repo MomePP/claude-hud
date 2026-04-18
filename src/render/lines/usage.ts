@@ -43,6 +43,7 @@ export function renderUsageLine(ctx: RenderContext): string | null {
   const usageBarEnabled = display?.usageBarEnabled ?? true;
   const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
   const barWidth = getAdaptiveBarWidth();
+  const barStyle = display?.barStyle;
 
   if (fiveHour === null && sevenDay !== null) {
     const weeklyOnlyPart = formatUsageWindowPart({
@@ -52,6 +53,7 @@ export function renderUsageLine(ctx: RenderContext): string | null {
       colors,
       usageBarEnabled,
       barWidth,
+      barStyle,
       forceLabel: true,
     });
     return `${usageLabel} ${weeklyOnlyPart}`;
@@ -64,6 +66,7 @@ export function renderUsageLine(ctx: RenderContext): string | null {
     colors,
     usageBarEnabled,
     barWidth,
+    barStyle,
   });
 
   if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
@@ -74,6 +77,7 @@ export function renderUsageLine(ctx: RenderContext): string | null {
       colors,
       usageBarEnabled,
       barWidth,
+      barStyle,
       forceLabel: true,
     });
     return `${usageLabel} ${fiveHourPart} | ${sevenDayPart}`;
@@ -100,6 +104,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   forceLabel = false,
 }: {
   label: string;
@@ -108,6 +113,7 @@ function formatUsageWindowPart({
   colors?: RenderContext["config"]["colors"];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin';
   forceLabel?: boolean;
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);
@@ -116,8 +122,8 @@ function formatUsageWindowPart({
 
   if (usageBarEnabled) {
     const body = reset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${t("format.resetsIn")} ${reset})`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 
