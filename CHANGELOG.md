@@ -4,6 +4,20 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-04-19 — MomePP fork
+
+### Added
+- `colors.duration` (default `dim`) — overrides the color of the
+  session-duration extra (`<clock> 1h 30m`). Independent of `colors.label`
+  so you can keep `Context`/`Usage` labels dim while making the duration
+  pop. Accepts named ANSI, 256-color number, or `#rrggbb`.
+
+### Changed
+- In the `natural` project style, the inline file-stats counter now reads
+  `with +X -Y changes` instead of just `+X -Y`. The `with`/`changes`
+  prose words are dim; the numbers keep their existing green/red colors.
+  Pipes mode is unchanged (still renders `[+X -Y]`).
+
 ## [0.1.5] - 2026-04-19 — MomePP fork
 
 ### Added
