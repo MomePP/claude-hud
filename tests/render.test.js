@@ -1613,7 +1613,7 @@ test('renderProjectLine colors ahead count at critical threshold', () => {
 test('renderGitFilesLine renders tracked files with per-file line diffs', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = '/tmp/my-project';
-  ctx.config.gitStatus.showFileStats = true;
+  ctx.config.gitStatus.showFileList = true;
   ctx.gitStatus = {
     branch: 'main',
     isDirty: true,
@@ -1642,7 +1642,7 @@ test('renderGitFilesLine renders tracked files with per-file line diffs', () => 
 
 test('renderGitFilesLine hides on narrow terminals', () => {
   const ctx = baseContext();
-  ctx.config.gitStatus.showFileStats = true;
+  ctx.config.gitStatus.showFileList = true;
   ctx.gitStatus = {
     branch: 'main',
     isDirty: true,

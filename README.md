@@ -141,7 +141,8 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `gitStatus.showAheadBehind` | boolean | false | Show `↑N ↓N` for ahead/behind remote |
 | `gitStatus.pushWarningThreshold` | number | 0 | Color the ahead count with the warning color at or above this unpushed-commit count (`0` disables it) |
 | `gitStatus.pushCriticalThreshold` | number | 0 | Color the ahead count with the critical color at or above this unpushed-commit count (`0` disables it) |
-| `gitStatus.showFileStats` | boolean | false | Show file change counts `!M +A ✘D ?U` |
+| `gitStatus.showFileStats` | boolean | false | Show inline line-diff counter `+A -D` next to the branch on the project line. In compact (single-line) layout it instead emits the Starship-style `!M +A ✘D ?U` summary. |
+| `gitStatus.showFileList` | boolean | false | Show the bottom multi-line list of changed files (`~src/foo.ts(+5 -3)  +src/new.ts  ?2`). Independent of `showFileStats` so you can keep the inline counter without the bottom list. |
 | `display.showModel` | boolean | true | Show model name `[Opus]` |
 | `display.showContextBar` | boolean | true | Show visual context bar `████░░░░░░` |
 | `display.contextValue` | `percent` \| `tokens` \| `remaining` \| `both` | `percent` | Context display format (`45%`, `45k/200k`, `55%` remaining, or `45% (45k/200k)`) |
@@ -163,6 +164,9 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
 | `display.showPendingPermission` | boolean | true | Inline `? <target>` hint on the project line while an Edit/Write/Bash permission prompt is pending (≤3s window) |
 | `display.showLastRequestTokens` | boolean | false | Inline `last: 12k→678` counter showing the most recent assistant turn's input and output tokens; appends `(+Xk)` when reasoning tokens are present |
+| `display.projectStyle` | `pipes` \| `natural` | `pipes` | Project-line layout. `pipes` keeps the classic `[Opus] │ project git:(branch)` shape. `natural` switches to a starship-style `<glyph> Opus in project on branch` prose layout, drops `[]` brackets and `git:( )` wrappers, and uses `display.naturalSeparator` between segments. |
+| `display.naturalSeparator` | string (≤8 chars) | ` · ` | Separator inserted between sections in `natural` project style (and between Context/Usage when they share a line in expanded layout). Examples: `" · "`, `" | "`, `" "`, `"  "`. |
+| `display.modelGlyph` | string (≤8 chars) | `` (Nerd Font sparkle `nf-cod-sparkle`, U+EC10) | Glyph rendered immediately before the model name in `natural` project style. Set to `""` to disable. Pick a glyph that exists in your terminal font — older Nerd Font patches without the codicon block won't show U+EBxx/ECxx; FontAwesome range (U+F000–U+F2E0) is the safest fallback (try `` U+F0D0 wand or `` U+F2DC snowflake). |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
@@ -178,6 +182,18 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brightBlue`, `brightMagenta`. You can also use a 256-color number (`0-255`) or hex (`#rrggbb`).
 
 `display.showMemoryUsage` is fully opt-in and only renders in `expanded` layout. It reports approximate system RAM usage from the local machine, not precise memory pressure inside Claude Code or a specific process. The number may overstate actual pressure because reclaimable OS cache and buffers can still be counted as used memory.
+
+`display.projectStyle: "natural"` is a fork-only addition that swaps the dense bracketed/piped project line for a more readable starship-style line. Compare:
+
+```
+# pipes (default)
+[Opus 4.7 (1M context)] │ claude-hud git:(main*)
+
+# natural
+ Opus 4.7 (1M context) in claude-hud on main*
+```
+
+Pair it with `gitStatus.showFileStats: true` and `gitStatus.showFileList: false` to keep just the inline `+5 -3` counter without the bottom file list. The default `naturalSeparator` (` · `) is used both between core/extras on the project line and between Context and Usage when they share a line in expanded layout.
 
 `display.showThinkingIndicator`, `display.showPendingPermission`, and `display.showLastRequestTokens` are fork-only additions. Thinking and pending-permission default to on (they've shipped that way since 0.1.0 without being noisy in practice); the last-request token counter defaults to off because it renders on every assistant turn. All three share the project line, so they only appear when there's live state to show.
 

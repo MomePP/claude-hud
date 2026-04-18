@@ -17,6 +17,7 @@ export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
  *   short:   Strip context suffix AND "Claude " prefix (e.g. "Opus 4.6")
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
+export type ProjectStyleMode = 'pipes' | 'natural';
 export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
@@ -69,6 +70,7 @@ export interface HudConfig {
     showDirty: boolean;
     showAheadBehind: boolean;
     showFileStats: boolean;
+    showFileList: boolean;
     pushWarningThreshold: number;
     pushCriticalThreshold: number;
   };
@@ -102,6 +104,9 @@ export interface HudConfig {
     modelFormat: ModelFormatMode;
     modelOverride: string;
     customLine: string;
+    projectStyle: ProjectStyleMode;
+    naturalSeparator: string;
+    modelGlyph: string;
   };
   colors: HudColorOverrides;
 }
@@ -117,6 +122,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showDirty: true,
     showAheadBehind: false,
     showFileStats: false,
+    showFileList: false,
     pushWarningThreshold: 0,
     pushCriticalThreshold: 0,
   },
@@ -150,6 +156,9 @@ export const DEFAULT_CONFIG: HudConfig = {
     modelFormat: 'full',
     modelOverride: '',
     customLine: '',
+    projectStyle: 'pipes',
+    naturalSeparator: ' · ',
+    modelGlyph: '\uec10',
   },
   colors: {
     context: 'green',
@@ -193,6 +202,10 @@ function validateLanguage(value: unknown): value is Language {
 
 function validateModelFormat(value: unknown): value is ModelFormatMode {
   return value === 'full' || value === 'compact' || value === 'short';
+}
+
+function validateProjectStyle(value: unknown): value is ProjectStyleMode {
+  return value === 'pipes' || value === 'natural';
 }
 
 function validateColorName(value: unknown): value is HudColorName {
@@ -315,6 +328,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
       ? migrated.gitStatus.showFileStats
       : DEFAULT_CONFIG.gitStatus.showFileStats,
+    showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+      ? migrated.gitStatus.showFileList
+      : DEFAULT_CONFIG.gitStatus.showFileList,
     pushWarningThreshold: validateCountThreshold(migrated.gitStatus?.pushWarningThreshold),
     pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
   };
@@ -401,6 +417,15 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     customLine: typeof migrated.display?.customLine === 'string'
       ? migrated.display.customLine.slice(0, 80)
       : DEFAULT_CONFIG.display.customLine,
+    projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+      ? migrated.display.projectStyle
+      : DEFAULT_CONFIG.display.projectStyle,
+    naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+      ? migrated.display.naturalSeparator.slice(0, 8)
+      : DEFAULT_CONFIG.display.naturalSeparator,
+    modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+      ? migrated.display.modelGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.modelGlyph,
   };
 
   const colors = {

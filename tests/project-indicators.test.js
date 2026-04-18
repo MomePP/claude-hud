@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { renderProjectLine } from '../dist/render/lines/project.js';
+import { renderProjectLine, renderGitFilesLine } from '../dist/render/lines/project.js';
 import { DEFAULT_CONFIG, mergeConfig } from '../dist/config.js';
 
 function stripAnsi(s) {
@@ -96,4 +96,136 @@ test('DEFAULT_CONFIG ships the three new flags with expected defaults', () => {
   assert.equal(DEFAULT_CONFIG.display.showThinkingIndicator, true);
   assert.equal(DEFAULT_CONFIG.display.showPendingPermission, true);
   assert.equal(DEFAULT_CONFIG.display.showLastRequestTokens, false);
+});
+
+test('DEFAULT_CONFIG ships natural-mode toggles and file-list split with expected defaults', () => {
+  assert.equal(DEFAULT_CONFIG.display.projectStyle, 'pipes');
+  assert.equal(DEFAULT_CONFIG.display.naturalSeparator, ' \u00B7 ');
+  assert.equal(DEFAULT_CONFIG.display.modelGlyph, '\uec10');
+  assert.equal(DEFAULT_CONFIG.gitStatus.showFileList, false);
+});
+
+test('pipes mode (default) keeps the [model] brackets and \u2502 separator', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({}),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: false, ahead: 0, behind: 0 };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /\[Opus\]/);
+  assert.match(out, /git:\(main\)/);
+  assert.match(out, /\u2502/);
+});
+
+test('natural mode drops [] brackets and uses in/on prepositions', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { projectStyle: 'natural' } }),
+  });
+  ctx.gitStatus = { branch: 'main', isDirty: true, ahead: 0, behind: 0 };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.doesNotMatch(out, /\[Opus\]/);
+  assert.doesNotMatch(out, /git:\(/);
+  assert.match(out, /Opus/);
+  assert.match(out, /in my-project/);
+  assert.match(out, /on main\*/);
+});
+
+test('natural mode shows the configured model glyph before the model name', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { projectStyle: 'natural' } }),
+  });
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /\uec10 Opus/, 'expected default sparkle glyph before model');
+});
+
+test('natural mode model glyph is configurable (e.g. snowflake)', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { projectStyle: 'natural', modelGlyph: '\uF2DC' } }),
+  });
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /\uF2DC Opus/);
+});
+
+test('natural mode model glyph can be disabled with empty string', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ display: { projectStyle: 'natural', modelGlyph: '' } }),
+  });
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.doesNotMatch(out, /\uec10/, 'sparkle glyph should be absent when disabled');
+  assert.match(out, /^(?:\x1b\[[0-9;]*m)*Opus/, 'model name should sit at the start with no glyph prefix');
+});
+
+test('natural mode separator is configurable', () => {
+  const ctx = baseCtx({
+    transcript: { thinkingState: { active: true, lastSeen: new Date() } },
+    config: mergeConfig({ display: { projectStyle: 'natural', naturalSeparator: ' | ' } }),
+  });
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, / \| /, 'configured separator should appear between core and indicators');
+  assert.doesNotMatch(out, /\u00B7/);
+});
+
+test('showFileStats inline counter renders in pipes mode without bottom file list', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ gitStatus: { showFileStats: true, showFileList: false } }),
+  });
+  ctx.gitStatus = {
+    branch: 'main',
+    isDirty: true,
+    ahead: 0,
+    behind: 0,
+    lineDiff: { added: 5, deleted: 3 },
+    fileStats: {
+      modified: 1,
+      added: 0,
+      deleted: 0,
+      untracked: 0,
+      trackedFiles: [{ basename: 'a.ts', fullPath: 'src/a.ts', type: 'modified', lineDiff: { added: 5, deleted: 3 } }],
+    },
+  };
+  assert.match(stripAnsi(renderProjectLine(ctx)), /\+5 -3/);
+  assert.equal(renderGitFilesLine(ctx, 120), null, 'file list should be suppressed when showFileList=false');
+});
+
+test('showFileStats inline counter renders in natural mode without bottom file list', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural' },
+      gitStatus: { showFileStats: true, showFileList: false },
+    }),
+  });
+  ctx.gitStatus = {
+    branch: 'main',
+    isDirty: false,
+    ahead: 0,
+    behind: 0,
+    lineDiff: { added: 5, deleted: 3 },
+    fileStats: { modified: 1, added: 0, deleted: 0, untracked: 0, trackedFiles: [] },
+  };
+  const out = stripAnsi(renderProjectLine(ctx));
+  assert.match(out, /on main \+5 -3/, 'inline counter sits next to branch in natural mode');
+  assert.equal(renderGitFilesLine(ctx, 120), null);
+});
+
+test('showFileList=true brings back the bottom file list (independent of showFileStats)', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({ gitStatus: { showFileStats: false, showFileList: true } }),
+  });
+  ctx.gitStatus = {
+    branch: 'main',
+    isDirty: true,
+    ahead: 0,
+    behind: 0,
+    lineDiff: { added: 5, deleted: 3 },
+    fileStats: {
+      modified: 1,
+      added: 0,
+      deleted: 0,
+      untracked: 0,
+      trackedFiles: [{ basename: 'a.ts', fullPath: 'src/a.ts', type: 'modified', lineDiff: { added: 5, deleted: 3 } }],
+    },
+  };
+  assert.doesNotMatch(stripAnsi(renderProjectLine(ctx)), /\+5 -3/, 'inline counter stays off when showFileStats=false');
+  const fileLine = renderGitFilesLine(ctx, 120);
+  assert.ok(fileLine, 'file list should render when showFileList=true');
+  assert.match(stripAnsi(fileLine), /a\.ts/);
 });

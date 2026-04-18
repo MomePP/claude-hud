@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG = {
         showDirty: true,
         showAheadBehind: false,
         showFileStats: false,
+        showFileList: false,
         pushWarningThreshold: 0,
         pushCriticalThreshold: 0,
     },
@@ -57,6 +58,9 @@ export const DEFAULT_CONFIG = {
         modelFormat: 'full',
         modelOverride: '',
         customLine: '',
+        projectStyle: 'pipes',
+        naturalSeparator: ' · ',
+        modelGlyph: '\uec10',
     },
     colors: {
         context: 'green',
@@ -93,6 +97,9 @@ function validateLanguage(value) {
 }
 function validateModelFormat(value) {
     return value === 'full' || value === 'compact' || value === 'short';
+}
+function validateProjectStyle(value) {
+    return value === 'pipes' || value === 'natural';
 }
 function validateColorName(value) {
     return value === 'dim'
@@ -200,6 +207,9 @@ export function mergeConfig(userConfig) {
         showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
             ? migrated.gitStatus.showFileStats
             : DEFAULT_CONFIG.gitStatus.showFileStats,
+        showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+            ? migrated.gitStatus.showFileList
+            : DEFAULT_CONFIG.gitStatus.showFileList,
         pushWarningThreshold: validateCountThreshold(migrated.gitStatus?.pushWarningThreshold),
         pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
     };
@@ -285,6 +295,15 @@ export function mergeConfig(userConfig) {
         customLine: typeof migrated.display?.customLine === 'string'
             ? migrated.display.customLine.slice(0, 80)
             : DEFAULT_CONFIG.display.customLine,
+        projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+            ? migrated.display.projectStyle
+            : DEFAULT_CONFIG.display.projectStyle,
+        naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+            ? migrated.display.naturalSeparator.slice(0, 8)
+            : DEFAULT_CONFIG.display.naturalSeparator,
+        modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+            ? migrated.display.modelGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.modelGlyph,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)

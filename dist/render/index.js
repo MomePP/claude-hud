@@ -323,7 +323,10 @@ function renderExpanded(ctx, terminalWidth = null) {
             const firstLine = renderElementLine(ctx, element);
             const secondLine = renderElementLine(ctx, nextElement);
             if (firstLine && secondLine) {
-                const combinedLine = `${firstLine} │ ${secondLine}`;
+                const combineSep = ctx.config?.display?.projectStyle === 'natural'
+                    ? (ctx.config?.display?.naturalSeparator || ' \u00B7 ')
+                    : ' \u2502 ';
+                const combinedLine = `${firstLine}${combineSep}${secondLine}`;
                 const canCombine = !terminalWidth || visualLength(combinedLine) <= terminalWidth;
                 if (canCombine) {
                     lines.push({ line: combinedLine, isActivity: false });
