@@ -18,7 +18,7 @@ export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type ProjectStyleMode = 'pipes' | 'natural';
-export type BarStyleMode = 'block' | 'square' | 'thin';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type HudElement = 'project' | 'context' | 'usage' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
@@ -218,7 +218,13 @@ function validateProjectStyle(value: unknown): value is ProjectStyleMode {
 }
 
 function validateBarStyle(value: unknown): value is BarStyleMode {
-  return value === 'block' || value === 'square' || value === 'thin';
+  return value === 'block'
+    || value === 'square'
+    || value === 'thin'
+    || value === 'vertical'
+    || value === 'dots'
+    || value === 'shade'
+    || value === 'double';
 }
 
 function validateColorName(value: unknown): value is HudColorName {

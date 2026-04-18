@@ -174,6 +174,26 @@ test('barStyle "thin" swaps to U+2501 / U+2500', () => {
   assert.match(out, /\u2501{3}\u2500{3}/);
 });
 
+test('barStyle "vertical" swaps to U+25AE / U+25AF', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'vertical'));
+  assert.match(out, /\u25AE{3}\u25AF{3}/);
+});
+
+test('barStyle "dots" swaps to U+25CF / U+25CB', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'dots'));
+  assert.match(out, /\u25CF{3}\u25CB{3}/);
+});
+
+test('barStyle "shade" swaps to U+2593 / U+2591', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'shade'));
+  assert.match(out, /\u2593{3}\u2591{3}/);
+});
+
+test('barStyle "double" swaps to U+2550 / U+2500', () => {
+  const out = stripAnsi(coloredBar(50, 6, undefined, 'double'));
+  assert.match(out, /\u2550{3}\u2500{3}/);
+});
+
 test('unknown barStyle falls back to block', () => {
   const out = stripAnsi(coloredBar(50, 6, undefined, 'mystery'));
   assert.match(out, /\u2588{3}\u2591{3}/);

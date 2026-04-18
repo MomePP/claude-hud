@@ -128,12 +128,16 @@ export function getQuotaColor(percent: number, colors?: Partial<HudColorOverride
   return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
 
-export type BarStyleName = 'block' | 'square' | 'thin';
+export type BarStyleName = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 
 const BAR_CHARS: Record<BarStyleName, { filled: string; empty: string }> = {
-  block:  { filled: '█', empty: '░' },
-  square: { filled: '▰', empty: '▱' },
-  thin:   { filled: '━', empty: '─' },
+  block:    { filled: '█', empty: '░' },
+  square:   { filled: '▰', empty: '▱' },
+  thin:     { filled: '━', empty: '─' },
+  vertical: { filled: '▮', empty: '▯' },
+  dots:     { filled: '●', empty: '○' },
+  shade:    { filled: '▓', empty: '░' },
+  double:   { filled: '═', empty: '─' },
 };
 
 function barChars(style: BarStyleName | undefined): { filled: string; empty: string } {

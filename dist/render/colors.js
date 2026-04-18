@@ -110,6 +110,10 @@ const BAR_CHARS = {
     block: { filled: '█', empty: '░' },
     square: { filled: '▰', empty: '▱' },
     thin: { filled: '━', empty: '─' },
+    vertical: { filled: '▮', empty: '▯' },
+    dots: { filled: '●', empty: '○' },
+    shade: { filled: '▓', empty: '░' },
+    double: { filled: '═', empty: '─' },
 };
 function barChars(style) {
     return BAR_CHARS[style ?? 'block'] ?? BAR_CHARS.block;

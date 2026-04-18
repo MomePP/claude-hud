@@ -314,7 +314,7 @@ function formatUsageWindowPart({
   colors?: RenderContext['config']['colors'];
   usageBarEnabled: boolean;
   barWidth: number;
-  barStyle?: 'block' | 'square' | 'thin';
+  barStyle?: 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
   forceLabel?: boolean;
 }): string {
   const usageDisplay = formatUsagePercent(percent, colors);

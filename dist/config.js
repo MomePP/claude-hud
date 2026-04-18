@@ -106,7 +106,13 @@ function validateProjectStyle(value) {
     return value === 'pipes' || value === 'natural';
 }
 function validateBarStyle(value) {
-    return value === 'block' || value === 'square' || value === 'thin';
+    return value === 'block'
+        || value === 'square'
+        || value === 'thin'
+        || value === 'vertical'
+        || value === 'dots'
+        || value === 'shade'
+        || value === 'double';
 }
 function validateColorName(value) {
     return value === 'dim'
