@@ -4,6 +4,32 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-19 — MomePP fork
+
+### Added
+- New `display.projectStyle` toggle (`pipes` | `natural`, default `pipes`).
+  `natural` renders the project line in a starship-style prose layout —
+  `<glyph> Opus 4.7 (1M context) in claude-hud on main*` — dropping the
+  `[]` brackets and `git:( )` wrappers in favor of `in`/`on` prepositions.
+- `display.naturalSeparator` (default ` · `) controls the separator
+  between segments in `natural` mode and between Context and Usage when
+  they share a line in expanded layout.
+- `display.modelGlyph` (default `\uec10` `nf-cod-sparkle`) renders before
+  the model name in `natural` mode. Set to `""` to disable, or override
+  with any glyph (`\uf0d0` wand, `\uf2dc` snowflake, etc.). FontAwesome
+  range (U+F000–U+F2E0) is the safest fallback for older Nerd Fonts
+  without the codicon block.
+- `gitStatus.showFileList` (default `false`) splits out the bottom
+  multi-line list of changed files so it's independent of
+  `gitStatus.showFileStats`. You can now keep the inline `+5 -3`
+  counter on the project line without the multi-line file list below.
+
+### Changed
+- `gitStatus.showFileStats` no longer enables the bottom multi-line file
+  list — it now controls only the inline `+A -D` counter on the project
+  line (and the Starship-style `!M +A ✘D ?U` summary in compact layout).
+  Use the new `gitStatus.showFileList` to bring the bottom list back.
+
 ## [0.1.1] - 2026-04-17 — MomePP fork
 
 ### Changed
