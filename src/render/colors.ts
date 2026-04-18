@@ -112,6 +112,10 @@ export function thinking(text: string, colors?: Partial<HudColorOverrides>): str
   return withOverride(text, colors?.thinking, DIM);
 }
 
+export function duration(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.duration, DIM);
+}
+
 export function warning(text: string, colors?: Partial<HudColorOverrides>): string {
   return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }

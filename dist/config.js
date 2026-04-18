@@ -79,6 +79,7 @@ export const DEFAULT_CONFIG = {
         label: 'dim',
         custom: 208,
         thinking: 'dim',
+        duration: 'dim',
     },
 };
 export function getConfigPath() {
@@ -368,6 +369,9 @@ export function mergeConfig(userConfig) {
         thinking: validateColorValue(migrated.colors?.thinking)
             ? migrated.colors.thinking
             : DEFAULT_CONFIG.colors.thinking,
+        duration: validateColorValue(migrated.colors?.duration)
+            ? migrated.colors.duration
+            : DEFAULT_CONFIG.colors.duration,
     };
     return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };
 }

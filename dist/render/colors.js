@@ -89,6 +89,9 @@ export function custom(text, colors) {
 export function thinking(text, colors) {
     return withOverride(text, colors?.thinking, DIM);
 }
+export function duration(text, colors) {
+    return withOverride(text, colors?.duration, DIM);
+}
 export function warning(text, colors) {
     return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }

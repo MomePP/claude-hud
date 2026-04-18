@@ -1,7 +1,7 @@
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, duration as durationColor, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { t } from '../i18n/index.js';
@@ -204,7 +204,7 @@ export function renderSessionLine(ctx) {
     if (display?.showDuration !== false && ctx.sessionDuration) {
         const durationGlyph = display?.durationGlyph ?? '';
         const durationText = durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration;
-        parts.push(label(durationText, colors));
+        parts.push(durationColor(durationText, colors));
     }
     const costEstimate = renderCostEstimate(ctx);
     if (costEstimate) {

@@ -361,8 +361,30 @@ test('showFileStats inline counter renders in natural mode without bottom file l
     fileStats: { modified: 1, added: 0, deleted: 0, untracked: 0, trackedFiles: [] },
   };
   const out = stripAnsi(renderProjectLine(ctx));
-  assert.match(out, /on main \+5 -3/, 'inline counter sits next to branch in natural mode');
+  assert.match(out, /on main with \+5 -3 changes/, 'natural mode wraps line-diff in "with ... changes"');
   assert.equal(renderGitFilesLine(ctx, 120), null);
+});
+
+test('natural mode dims the "with" and "changes" labels around the colored counters', () => {
+  const ctx = baseCtx({
+    config: mergeConfig({
+      display: { projectStyle: 'natural', branchGlyph: '' },
+      gitStatus: { showFileStats: true, showFileList: false },
+    }),
+  });
+  ctx.gitStatus = {
+    branch: 'main',
+    isDirty: false,
+    ahead: 0,
+    behind: 0,
+    lineDiff: { added: 5, deleted: 3 },
+    fileStats: { modified: 1, added: 0, deleted: 0, untracked: 0, trackedFiles: [] },
+  };
+  const out = renderProjectLine(ctx);
+  assert.match(out, /\x1b\[2mwith\x1b\[0m/, '"with" should be wrapped in dim ANSI');
+  assert.match(out, /\x1b\[2mchanges\x1b\[0m/, '"changes" should be wrapped in dim ANSI');
+  assert.match(out, /\x1b\[32m\+5\x1b\[0m/, 'added count keeps green color');
+  assert.match(out, /\x1b\[31m-3\x1b\[0m/, 'deleted count keeps red color');
 });
 
 test('showFileList=true brings back the bottom file list (independent of showFileStats)', () => {

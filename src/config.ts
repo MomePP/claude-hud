@@ -46,6 +46,7 @@ export interface HudColorOverrides {
   label: HudColorValue;
   custom: HudColorValue;
   thinking: HudColorValue;
+  duration: HudColorValue;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -183,6 +184,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     label: 'dim',
     custom: 208,
     thinking: 'dim',
+    duration: 'dim',
   },
 };
 
@@ -498,6 +500,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     thinking: validateColorValue(migrated.colors?.thinking)
       ? migrated.colors.thinking
       : DEFAULT_CONFIG.colors.thinking,
+    duration: validateColorValue(migrated.colors?.duration)
+      ? migrated.colors.duration
+      : DEFAULT_CONFIG.colors.duration,
   };
 
   return { language, lineLayout, showSeparators, pathLevels, elementOrder, gitStatus, display, colors };

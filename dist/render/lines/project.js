@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor } from '../colors.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 function formatCompactCount(n) {
@@ -54,7 +54,7 @@ function buildExtras(ctx) {
     if (display?.showDuration !== false && ctx.sessionDuration) {
         const durationGlyph = display?.durationGlyph ?? '';
         const durationText = durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration;
-        extras.push(label(durationText, colors));
+        extras.push(durationColor(durationText, colors));
     }
     const costEstimate = renderCostEstimate(ctx);
     if (costEstimate) {
@@ -165,7 +165,7 @@ function renderNaturalProjectLine(ctx) {
         if (gitConfig?.showFileStats && ctx.gitStatus.lineDiff) {
             const diffParts = formatLineDiffParts(ctx.gitStatus.lineDiff);
             if (diffParts.length > 0)
-                gitTokens.push(diffParts.join(' '));
+                gitTokens.push(`${dim('with')} ${diffParts.join(' ')} ${dim('changes')}`);
         }
         coreSegments.push(gitTokens.join(' '));
     }

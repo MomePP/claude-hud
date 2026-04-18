@@ -29,6 +29,7 @@ export interface HudColorOverrides {
     label: HudColorValue;
     custom: HudColorValue;
     thinking: HudColorValue;
+    duration: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export interface HudConfig {
