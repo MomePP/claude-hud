@@ -365,6 +365,59 @@ test('pendingPermission persists past the old 3s window until tool_result lands'
   assert.equal(second.pendingPermission.targetSummary, first.pendingPermission.targetSummary);
 });
 
+test('pendingPermission clears when a newer entry lands after it (interrupt detection)', async () => {
+  // Simulates the "user interrupted the chat" case: a tool_use fires, no
+  // matching tool_result ever arrives, and the user sends a fresh message.
+  // The pending indicator should drop since the tool_use was abandoned.
+  const now = Date.now();
+  const file = writeFixture([
+    {
+      timestamp: new Date(now - 90_000).toISOString(),
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', id: 'perm-interrupted', name: 'Edit', input: { file_path: '/tmp/README.md' } },
+        ],
+      },
+    },
+    {
+      // >= 30s later — well past PENDING_PERMISSION_INTERRUPT_GRACE_MS.
+      timestamp: new Date(now - 30_000).toISOString(),
+      type: 'user',
+      message: { content: [{ type: 'text', text: 'nevermind, do something else' }] },
+    },
+  ]);
+  const result = await parseTranscript(file);
+  assert.equal(result.pendingPermission, undefined, 'interrupted tool_use should not surface as pending');
+});
+
+test('pendingPermission clears on cache-hit once it exceeds the wall-clock cap', async () => {
+  // Simulates the "13-hour stuck indicator" bug: a pending tool_use from
+  // way in the past is stored in the cache, and a cache-hit still drops it
+  // because the finalize step applies PENDING_PERMISSION_MAX_AGE_MS.
+  const file = writeFixture([
+    {
+      timestamp: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', id: 'perm-ancient', name: 'Edit', input: { file_path: '/tmp/README.md' } },
+        ],
+      },
+    },
+  ]);
+  // Fresh parse already drops it (interrupt rule fires since there's only
+  // one entry, latestEntryTimestamp === tool_use.timestamp, so the
+  // interruptCutoff is that minus 30s — not yet triggered. But the
+  // wall-clock cap is 5 min; the entry is 6 min old, so it drops).
+  const first = await parseTranscript(file);
+  assert.equal(first.pendingPermission, undefined, '6-min-old entry exceeds wall-clock cap');
+
+  // Cache hit: finalize must reapply the cap so a cached stuck entry clears.
+  const second = await parseTranscript(file);
+  assert.equal(second.pendingPermission, undefined, 'cache-hit should also drop aged entry');
+});
+
 test('pendingPermission picks the youngest still-open entry when multiple exist', async () => {
   const earlier = new Date(Date.now() - 20_000).toISOString();
   const later = new Date(Date.now() - 5_000).toISOString();

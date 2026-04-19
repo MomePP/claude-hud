@@ -20,6 +20,15 @@ const PERMISSION_TOOLS = new Set(['Edit', 'Write', 'Bash']);
 const THINKING_PART_TYPES = new Set(['thinking', 'reasoning']);
 // How long after the last thinking block we still consider thinking "active".
 const THINKING_RECENCY_MS = 30_000;
+// Hard wall-clock cap for a pending-permission indicator. Real approval
+// prompts resolve in seconds. Anything older than this is stuck — usually
+// because the user interrupted the chat and the tool_use never got a
+// matching tool_result.
+const PENDING_PERMISSION_MAX_AGE_MS = 5 * 60 * 1000;
+// In-transcript grace window: if the latest entry is this much newer than a
+// pending tool_use (and no matching tool_result arrived in between), treat
+// the tool_use as abandoned and drop the indicator.
+const PENDING_PERMISSION_INTERRUPT_GRACE_MS = 30 * 1000;
 let createReadStreamImpl = fs.createReadStream;
 function normalizeTokenCount(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -178,10 +187,18 @@ function finalizeTranscriptResult(result) {
         const age = now - thinkingState.lastSeen.getTime();
         thinkingState = { ...thinkingState, active: age <= THINKING_RECENCY_MS };
     }
-    // pendingPermission now survives until the matching tool_result appends
-    // to the transcript, which invalidates the cache and triggers a re-parse
-    // that clears the entry. No age-based filter here.
-    return { ...result, thinkingState, pendingPermission: result.pendingPermission };
+    // pendingPermission normally clears when the matching tool_result appends
+    // to the transcript. If the user interrupted mid-prompt, no tool_result
+    // ever arrives — so apply a wall-clock cap here to clear stuck indicators
+    // even on pure cache-hit reads where we don't see a fresh user entry.
+    let pendingPermission = result.pendingPermission;
+    if (pendingPermission) {
+        const age = now - pendingPermission.timestamp.getTime();
+        if (age > PENDING_PERMISSION_MAX_AGE_MS) {
+            pendingPermission = undefined;
+        }
+    }
+    return { ...result, thinkingState, pendingPermission };
 }
 export async function parseTranscript(transcriptPath) {
     const result = {
@@ -223,11 +240,21 @@ export async function parseTranscript(transcriptPath) {
     // Tail-read only covers the last 4MB, so token accumulation and session
     // start would be partial. Flag so we can skip writing those to the result.
     const usedTailRead = transcriptState.size > MAX_TAIL_BYTES;
+    // Track the freshest entry timestamp seen so the pending-permission
+    // picker can detect interruptions (entries after a pending tool_use).
+    let latestEntryTimestamp;
     const handleLine = (line) => {
         if (!line.trim())
             return;
         try {
             const entry = JSON.parse(line);
+            if (typeof entry.timestamp === 'string') {
+                const ts = new Date(entry.timestamp);
+                if (!Number.isNaN(ts.getTime())
+                    && (!latestEntryTimestamp || ts.getTime() > latestEntryTimestamp.getTime())) {
+                    latestEntryTimestamp = ts;
+                }
+            }
             if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
                 customTitle = entry.customTitle;
             }
@@ -290,8 +317,21 @@ export async function parseTranscript(transcriptPath) {
     // recent thing Claude is waiting on. Insertion order is chronological, so
     // the last entry in the map is the freshest. The entry carries its raw
     // timestamp; the render layer computes `(waiting Ns)` at display time.
+    //
+    // Interrupt detection: if the latest transcript entry is notably newer
+    // than a pending tool_use and no matching tool_result arrived between
+    // them, the user interrupted — drop the permission. Also apply a wall-
+    // clock cap so stale sessions don't show hour-old "waiting" indicators.
+    const nowMs = Date.now();
+    const interruptCutoff = latestEntryTimestamp
+        ? latestEntryTimestamp.getTime() - PENDING_PERMISSION_INTERRUPT_GRACE_MS
+        : -Infinity;
+    const wallClockCutoff = nowMs - PENDING_PERMISSION_MAX_AGE_MS;
+    const cutoff = Math.max(interruptCutoff, wallClockCutoff);
     let youngest;
     for (const permission of pendingPermissionMap.values()) {
+        if (permission.timestamp.getTime() < cutoff)
+            continue;
         if (!youngest || permission.timestamp.getTime() > youngest.timestamp.getTime()) {
             youngest = permission;
         }
