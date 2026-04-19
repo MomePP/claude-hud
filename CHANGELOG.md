@@ -4,6 +4,25 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-04-19 — MomePP fork
+
+### Fixed
+- Pending-permission indicator no longer gets stuck for hours after an
+  interrupted chat. The previous refactor (0.1.1) dropped the 3-second
+  timeout and relied entirely on a matching `tool_result` to clear the
+  entry — but if the user interrupted the session (Ctrl+C / ESC) before
+  responding to the approval prompt, no `tool_result` ever arrives and the
+  indicator stuck around (reports of `(waiting 46872s)` after ~13 hours).
+  Two new safeguards:
+  - **Interrupt detection**: when the latest transcript entry is more than
+    30 s newer than a still-open permission tool_use, treat the tool_use
+    as abandoned and drop the indicator.
+  - **Wall-clock cap**: permission entries older than 5 minutes are always
+    dropped, including on pure cache-hit reads — so stale state clears
+    even when no fresh user entry arrives.
+  Active approval prompts (tool_use is the newest entry, no abandonment
+  signal) still display the `(waiting Ns)` counter as before.
+
 ## [0.1.6] - 2026-04-19 — MomePP fork
 
 ### Added
