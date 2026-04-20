@@ -4,6 +4,16 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-20 — MomePP fork
+
+### Fixed
+- Context, usage, and memory bars now honor `display.barStyle` again.
+  The 0.2.0 rebase took upstream's `identity.ts`, `memory.ts`,
+  `usage.ts`, and `session-line.ts` which call `coloredBar` / `quotaBar`
+  without the optional 4th `style` argument, so every bar rendered as
+  `block` regardless of config. All five call sites now thread
+  `display?.barStyle` through to the bar helpers.
+
 ## [0.2.0] - 2026-04-20 — MomePP fork (upstream rebase)
 
 This release **rebases the MomePP fork on top of upstream 0.1.0** so the

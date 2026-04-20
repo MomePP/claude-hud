@@ -27,6 +27,7 @@ export function renderMemoryLine(ctx: RenderContext): string | null {
     ctx.memoryUsage.usedPercent,
     getAdaptiveBarWidth(),
     colors,
+    display?.barStyle,
   );
 
   return `${memoryLabel} ${bar} ${formatBytes(ctx.memoryUsage.usedBytes)} / ${formatBytes(ctx.memoryUsage.totalBytes)} (${percent})`;

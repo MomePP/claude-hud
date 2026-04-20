@@ -22,10 +22,10 @@ export function renderSessionLine(ctx) {
         console.error(`[claude-hud:context] autocompactBuffer=disabled, showing raw ${rawPercent}% (buffered would be ${bufferedPercent}%)`);
     }
     const colors = ctx.config?.colors;
-    const barWidth = getAdaptiveBarWidth();
-    const bar = coloredBar(percent, barWidth, colors);
-    const parts = [];
     const display = ctx.config?.display;
+    const barWidth = getAdaptiveBarWidth();
+    const bar = coloredBar(percent, barWidth, colors, display?.barStyle);
+    const parts = [];
     const timeFormat = display?.timeFormat ?? 'relative';
     const resetsKey = timeFormat === 'absolute' ? 'format.resets' : 'format.resetsIn';
     const contextValueMode = display?.contextValue ?? 'percent';
@@ -196,6 +196,7 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        barStyle: display?.barStyle,
                         timeFormat,
                         showResetLabel,
                         forceLabel: true,
@@ -210,6 +211,7 @@ export function renderSessionLine(ctx) {
                         colors,
                         usageBarEnabled,
                         barWidth,
+                        barStyle: display?.barStyle,
                         timeFormat,
                         showResetLabel,
                     });
@@ -222,6 +224,7 @@ export function renderSessionLine(ctx) {
                             colors,
                             usageBarEnabled,
                             barWidth,
+                            barStyle: display?.barStyle,
                             timeFormat,
                             showResetLabel,
                             forceLabel: true,
@@ -325,7 +328,7 @@ function formatUsagePercent(percent, colors) {
     const color = getQuotaColor(percent, colors);
     return `${color}${percent}%${RESET}`;
 }
-function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, timeFormat = 'relative', showResetLabel, forceLabel = false, }) {
+function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, usageBarEnabled, barWidth, barStyle, timeFormat = 'relative', showResetLabel, forceLabel = false, }) {
     const usageDisplay = formatUsagePercent(percent, colors);
     const reset = formatResetTime(resetAt, timeFormat);
     const styledLabel = label(windowLabel, colors);
@@ -338,8 +341,8 @@ function formatUsageWindowPart({ label: windowLabel, percent, resetAt, colors, u
             ? (reset ? `${reset} / ${windowLabel}` : null)
             : (reset ? (showResetLabel ? `${t(resetsKey)} ${reset}` : reset) : null);
         const body = barReset
-            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${barReset})`
-            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+            ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${barReset})`
+            : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
         return forceLabel ? `${styledLabel} ${body}` : body;
     }
     const resetSuffix = reset

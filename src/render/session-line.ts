@@ -29,11 +29,11 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   const colors = ctx.config?.colors;
+  const display = ctx.config?.display;
   const barWidth = getAdaptiveBarWidth();
-  const bar = coloredBar(percent, barWidth, colors);
+  const bar = coloredBar(percent, barWidth, colors, display?.barStyle);
 
   const parts: string[] = [];
-  const display = ctx.config?.display;
   const timeFormat: TimeFormatMode = display?.timeFormat ?? 'relative';
   const resetsKey = timeFormat === 'absolute' ? 'format.resets' : 'format.resetsIn';
   const contextValueMode = display?.contextValue ?? 'percent';
@@ -209,6 +209,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,
@@ -222,6 +223,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
           });
@@ -235,6 +237,7 @@ export function renderSessionLine(ctx: RenderContext): string {
               colors,
               usageBarEnabled,
               barWidth,
+              barStyle: display?.barStyle,
               timeFormat,
               showResetLabel,
               forceLabel: true,
@@ -369,6 +372,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   timeFormat = 'relative',
   showResetLabel,
   forceLabel = false,
@@ -379,6 +383,7 @@ function formatUsageWindowPart({
   colors?: RenderContext['config']['colors'];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
   timeFormat?: TimeFormatMode;
   showResetLabel: boolean;
   forceLabel?: boolean;
@@ -396,8 +401,8 @@ function formatUsageWindowPart({
       ? (reset ? `${reset} / ${windowLabel}` : null)
       : (reset ? (showResetLabel ? `${t(resetsKey)} ${reset}` : reset) : null);
     const body = barReset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${barReset})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${barReset})`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 
