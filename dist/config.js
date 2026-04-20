@@ -25,6 +25,7 @@ export const DEFAULT_CONFIG = {
         showDirty: true,
         showAheadBehind: false,
         showFileStats: false,
+        branchOverflow: 'truncate',
         pushWarningThreshold: 0,
         pushCriticalThreshold: 0,
     },
@@ -86,6 +87,9 @@ function validateLineLayout(value) {
 }
 function validateAutocompactBuffer(value) {
     return value === 'enabled' || value === 'disabled';
+}
+function validateGitBranchOverflow(value) {
+    return value === 'truncate' || value === 'wrap';
 }
 function validateContextValue(value) {
     return value === 'percent' || value === 'tokens' || value === 'remaining' || value === 'both';
@@ -209,6 +213,9 @@ export function mergeConfig(userConfig) {
         showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
             ? migrated.gitStatus.showFileStats
             : DEFAULT_CONFIG.gitStatus.showFileStats,
+        branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
+            ? migrated.gitStatus.branchOverflow
+            : DEFAULT_CONFIG.gitStatus.branchOverflow,
         pushWarningThreshold: validateCountThreshold(migrated.gitStatus?.pushWarningThreshold),
         pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
     };

@@ -38,6 +38,7 @@ export function renderProjectLine(ctx) {
     let gitPart = '';
     const gitConfig = ctx.config?.gitStatus;
     const showGit = gitConfig?.enabled ?? true;
+    const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
     if (showGit && ctx.gitStatus) {
         const branchText = ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
@@ -64,7 +65,13 @@ export function renderProjectLine(ctx) {
         gitPart = `${gitColor('git:(', colors)}${gitInner.join(' ')}${gitColor(')', colors)}`;
     }
     if (projectPart && gitPart) {
-        parts.push(`${projectPart} ${gitPart}`);
+        if (branchOverflow === 'wrap') {
+            parts.push(projectPart);
+            parts.push(gitPart);
+        }
+        else {
+            parts.push(`${projectPart} ${gitPart}`);
+        }
     }
     else if (projectPart) {
         parts.push(projectPart);
