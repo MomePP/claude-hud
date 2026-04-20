@@ -4,6 +4,269 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-20 — MomePP fork (upstream rebase)
+
+This release **rebases the MomePP fork on top of upstream 0.1.0** so the
+fork can continue to track upstream easily going forward. Everything from
+0.1.x was reapplied as a thin patch layer on top of upstream's latest,
+and upstream's new features land for free.
+
+### Added — from upstream 0.1.0 (inherited)
+- Prompt-cache countdown extra (`display.showPromptCache`,
+  `display.promptCacheTtlSeconds`, element `promptCache`).
+- Effort-level display in the model bracket (`display.showEffortLevel`).
+- `display.maxWidth` fallback for terminal-width detection.
+- `display.timeFormat` (`relative` / `absolute` / `both`) for reset-time
+  formatting.
+- `display.usageCompact` shorter-usage mode.
+- `display.showResetLabel` toggle for the reset-time label prefix.
+- `display.mergeGroups` — configurable expanded-layout line merges.
+- `gitStatus.branchOverflow: 'truncate' | 'wrap'` for long-branch
+  rendering (in pipes mode).
+- Context-cache fallback for zero-usage frames, progress-bar label
+  alignment, extracted `format-reset-time` helper, plus misc
+  stdin/cost/Bedrock/version-cache fixes inherited from upstream.
+
+### Changed
+- Version jumps from `0.1.7` → `0.2.0` to signal the new base
+  (upstream is at `0.1.0`, so staying on `0.1.x` would be misleading).
+- `renderGitFilesLine` now gates on `gitStatus.showFileList ??
+  gitStatus.showFileStats` so upstream configs that only set
+  `showFileStats` still render the bottom file list, while our fork's
+  explicit split behavior is preserved when `showFileList` is set.
+- Duration extra keeps the upstream `⏱️` emoji in **pipes** style and
+  uses `display.durationGlyph` only in **natural** style.
+- Default subagent fallback: `Agent` → `general-purpose` (fork
+  behavior), `Task` → `agent` (upstream behavior).
+
+### Preserved — fork features from 0.1.x
+- OMC transcript compat (`proxy_` stripping, `<task-notification>`
+  background-agent completion, subagent_type fallback).
+- Tail-read for transcripts larger than 4MB.
+- Inline project-line indicators: `∿ thinking`,
+  `? <target> (waiting Ns)` with interrupt + 5-min wall-clock cap,
+  `last: <in>→<out>` last-request tokens.
+- MCP tool-name compression (`mcp__plugin_X_Y__Z` → `X:Z`).
+- Natural project style with `display.projectStyle = 'natural'`,
+  model + project + branch glyphs, `display.naturalSeparator`,
+  `display.barStyle` (`block` / `square` / `thin` / `vertical` /
+  `dots` / `shade` / `double`), and `with +X -Y changes`
+  file-diff wording.
+- `gitStatus.showFileList` split from `gitStatus.showFileStats`.
+- Starship-aligned default palette (`model=green`, `project=cyan`,
+  `gitBranch=brightMagenta`) plus `colors.thinking` and
+  `colors.duration` overrides.
+- Pending-permission interrupt detection and wall-clock cap.
+- Fork infra: `scripts/claude-hud.sh` launcher, simplified
+  macOS/Linux `commands/setup.md`, no GitHub Actions, `dist/`
+  committed directly, MomePP metadata.
+
+### Upgrading
+Existing fork configs keep working unchanged. Upstream's new fields
+(`maxWidth`, `mergeGroups`, `timeFormat`, `usageCompact`,
+`showEffortLevel`, `showPromptCache`, `promptCacheTtlSeconds`,
+`showResetLabel`, `gitStatus.branchOverflow`) are all opt-in with
+upstream's defaults.
+
+## [0.1.7] - 2026-04-19 — MomePP fork
+
+### Fixed
+- Pending-permission indicator no longer gets stuck for hours after an
+  interrupted chat. The previous refactor (0.1.1) dropped the 3-second
+  timeout and relied entirely on a matching `tool_result` to clear the
+  entry — but if the user interrupted the session (Ctrl+C / ESC) before
+  responding to the approval prompt, no `tool_result` ever arrives and the
+  indicator stuck around (reports of `(waiting 46872s)` after ~13 hours).
+  Two new safeguards:
+  - **Interrupt detection**: when the latest transcript entry is more than
+    30 s newer than a still-open permission tool_use, treat the tool_use
+    as abandoned and drop the indicator.
+  - **Wall-clock cap**: permission entries older than 5 minutes are always
+    dropped, including on pure cache-hit reads — so stale state clears
+    even when no fresh user entry arrives.
+  Active approval prompts (tool_use is the newest entry, no abandonment
+  signal) still display the `(waiting Ns)` counter as before.
+
+## [0.1.6] - 2026-04-19 — MomePP fork
+
+### Added
+- `colors.duration` (default `dim`) — overrides the color of the
+  session-duration extra (`<clock> 1h 30m`). Independent of `colors.label`
+  so you can keep `Context`/`Usage` labels dim while making the duration
+  pop. Accepts named ANSI, 256-color number, or `#rrggbb`.
+
+### Changed
+- In the `natural` project style, the inline file-stats counter now reads
+  `with +X -Y changes` instead of just `+X -Y`. The `with`/`changes`
+  prose words are dim; the numbers keep their existing green/red colors.
+  Pipes mode is unchanged (still renders `[+X -Y]`).
+
+## [0.1.5] - 2026-04-19 — MomePP fork
+
+### Added
+- `colors.thinking` (default `dim`) — overrides the color of the inline
+  `∿ thinking` indicator. Accepts the same value space as the other color
+  fields (named ANSI, 256-color number, or `#rrggbb` hex).
+
+### Fixed
+- In the `natural` project style, `display.projectGlyph` and
+  `display.branchGlyph` now render in their respective module colors
+  (`colors.project` and `colors.gitBranch`) instead of the terminal's
+  default foreground. This matches the `display.modelGlyph` behavior and
+  keeps each section visually grouped.
+
+## [0.1.4] - 2026-04-19 — MomePP fork
+
+### Added
+- Four additional values for `display.barStyle`:
+  - `vertical` (`▮▯`, U+25AE/U+25AF) — recognizable progress-bar look.
+  - `dots` (`●○`, U+25CF/U+25CB) — distinctive circle progress.
+  - `shade` (`▓░`, U+2593/U+2591) — soft gradient, easier on the eyes.
+  - `double` (`═─`, U+2550/U+2500) — double-line tracks.
+  All seven values now share the same fallback path, so unknown values still
+  render as `block`.
+
+## [0.1.3] - 2026-04-19 — MomePP fork
+
+### Added
+- Three new glyph toggles for the `natural` project style and the duration
+  extra:
+  - `display.projectGlyph` (default `\uf114` `nf-fa-folder_o`, outlined
+    folder) — renders between `in` and the project name.
+  - `display.branchGlyph` (default `\ue725` `nf-dev-git_branch`) — renders
+    between `on` and the branch name.
+  - `display.durationGlyph` (default `\uf017` `nf-fa-clock_o`) — replaces the
+    legacy `⏱️` emoji on the duration extra in both `pipes` and `natural`
+    project styles.
+  Each accepts any string; set to `""` to disable.
+- `display.barStyle` (default `block`) controls the character set used for
+  context, usage, and memory bars. `block` = `█░` (current), `square` = `▰▱`
+  (modern, starship-like), `thin` = `━─` (minimal).
+
+### Changed
+- Default color palette aligned to starship's defaults so the model, project,
+  and branch each get a distinct color out of the box:
+  - `colors.model`: `cyan` → `green` (matches starship runtime/version
+    modules).
+  - `colors.project`: `yellow` → `cyan` (matches starship `directory`).
+  - `colors.gitBranch`: `cyan` → `brightMagenta` (matches starship
+    `git_branch` bold purple).
+  Existing user `colors.*` overrides keep working unchanged.
+- Duration extra now renders `\uf017 1h 30m` instead of `⏱️  1h 30m`. Set
+  `display.durationGlyph` to `"⏱️ "` to restore the emoji.
+
+## [0.1.2] - 2026-04-19 — MomePP fork
+
+### Added
+- New `display.projectStyle` toggle (`pipes` | `natural`, default `pipes`).
+  `natural` renders the project line in a starship-style prose layout —
+  `<glyph> Opus 4.7 (1M context) in claude-hud on main*` — dropping the
+  `[]` brackets and `git:( )` wrappers in favor of `in`/`on` prepositions.
+- `display.naturalSeparator` (default ` · `) controls the separator
+  between segments in `natural` mode and between Context and Usage when
+  they share a line in expanded layout.
+- `display.modelGlyph` (default `\uec10` `nf-cod-sparkle`) renders before
+  the model name in `natural` mode. Set to `""` to disable, or override
+  with any glyph (`\uf0d0` wand, `\uf2dc` snowflake, etc.). FontAwesome
+  range (U+F000–U+F2E0) is the safest fallback for older Nerd Fonts
+  without the codicon block.
+- `gitStatus.showFileList` (default `false`) splits out the bottom
+  multi-line list of changed files so it's independent of
+  `gitStatus.showFileStats`. You can now keep the inline `+5 -3`
+  counter on the project line without the multi-line file list below.
+
+### Changed
+- `gitStatus.showFileStats` no longer enables the bottom multi-line file
+  list — it now controls only the inline `+A -D` counter on the project
+  line (and the Starship-style `!M +A ✘D ?U` summary in compact layout).
+  Use the new `gitStatus.showFileList` to bring the bottom list back.
+
+## [0.1.1] - 2026-04-17 — MomePP fork
+
+### Changed
+- MCP tool names in the tools line now compress to `<plugin>:<fn>` (e.g.
+  `mcp__plugin_context-mode_context-mode__ctx_execute` →
+  `context-mode:ctx_execute`). Standard non-plugin MCP names compress to
+  `<server>:<fn>`. Non-MCP names pass through unchanged.
+- Pending-permission indicator no longer times out after 3 seconds. It now
+  persists for every open `tool_use` until the matching `tool_result`
+  appends to the transcript, and renders a `(waiting Ns)` counter so long
+  reads of the prompt no longer look like "Claude moved on." When multiple
+  permissions are open, the youngest (most recent) one wins.
+
+### Added
+- Three new `display` toggles for the inline project-line indicators:
+  `display.showThinkingIndicator` (default `true`),
+  `display.showPendingPermission` (default `true`),
+  `display.showLastRequestTokens` (default `false`).
+  The first two preserve existing behavior from 0.1.0; the third surfaces the
+  most recent assistant turn's token counts (`last: 12k→678`, with a
+  `(+Xk)` reasoning suffix when present) and is opt-in because it changes
+  every assistant turn.
+
+### Fixed
+- `thinkingState.active` and `pendingPermission` no longer get cached with
+  their computed booleans — a `finalizeTranscriptResult` step recomputes
+  both decay checks against `Date.now()` on every return, including cache
+  hits. Previously a cache hit could keep `∿ thinking` on screen for
+  minutes after thinking actually stopped.
+
+### Test hygiene
+- `tests/config.test.js` now isolates `loadConfig()` under a temporary
+  `CLAUDE_CONFIG_DIR` so the developer's live config no longer leaks into
+  the assertion.
+- `tests/render.test.js` and `tests/render-width.test.js` assertions now
+  match the capitalized agent-type display (`Planner`, `Plan-a`) introduced
+  by `formatAgentType` in 0.1.0.
+
+## [0.1.0] - 2026-04-17 — MomePP fork
+
+First versioned release after forking. Scope narrowed to personal use on macOS/Linux
+with oh-my-claudecode (OMC).
+
+### Added
+- OMC compatibility in the transcript parser: `proxy_Task`, `proxy_Agent`,
+  `proxy_Edit`, `proxy_TodoWrite`, etc. have the `proxy_` prefix stripped and
+  route identically to their native counterparts.
+- Background-agent completion tracking via `<task-notification>` blocks
+  (hyphen-cased tags, with underscore variants accepted). Agents launched with
+  `run_in_background: true` now transition out of `running`.
+- Tail-based transcript parsing for files larger than 4MB — previously the
+  whole file was streamed every ~300ms. Session-token totals and `sessionStart`
+  are suppressed in tail mode since they'd be partial.
+- New indicators in `TranscriptData`: `lastRequestTokenUsage`, `thinkingState`,
+  `pendingPermission`. Thinking state and pending permissions render inline on
+  the project line (`∿ thinking`, `? <target>`).
+- `scripts/claude-hud.sh` shipped launcher. Resolves the highest installed
+  plugin version, caches the resolved entry path, and reads terminal width
+  from the controlling tty (no tmux dependency).
+- `tests/transcript-omc.test.js` covering all of the above.
+
+### Changed
+- Agent labels with missing `subagent_type` now fall back to the caller-supplied
+  `input.name` first, then `general-purpose` (Claude Code's actual default) —
+  previously rendered as the literal string `unknown`.
+- Agent type display strips any `namespace:` prefix and capitalizes the first
+  letter, so `oh-my-claudecode:explore` appears as `Explore`, matching the
+  built-in style.
+- `commands/setup.md` rewritten for macOS/Linux only. Windows + PowerShell
+  branches, ghost-install detection, and runtime-specific bash variants all
+  removed.
+- `settings.json` generated by setup now points at
+  `scripts/claude-hud.sh` rather than embedding a 240-character dynamic bash
+  one-liner.
+
+### Removed
+- `.github/workflows/*` (ci, build-dist, claude, release). This fork has no CI.
+- `.github/dependabot.yml`. No CI to gate dependency PRs.
+- `dist/` is no longer gitignored — it's tracked so consumers and the plugin
+  loader don't need a build step. Run `npm run build` before committing.
+
+### Upstream provenance
+Based on upstream `0.0.12` (jarrodwatts/claude-hud, 2026-04-04). All HUD
+rendering, configuration flow, presets, and design decisions are unchanged
+from upstream.
+
 ## [0.0.12] - 2026-04-04
 
 ### Added
