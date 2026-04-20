@@ -135,14 +135,16 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `language` | `en` \| `zh` | `en` | HUD label language. English is the default; set `zh` to enable Chinese labels. |
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
-| `elementOrder` | string[] | `["project","context","usage","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
+| `maxWidth` | number \| `null` | `null` | Hard fallback width used only when terminal-width detection fails completely (tmux edge cases, weird TTYs). Inherited from upstream 0.1.0. |
+| `elementOrder` | string[] | `["project","context","usage","promptCache","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
 | `gitStatus.enabled` | boolean | true | Show git branch in HUD |
 | `gitStatus.showDirty` | boolean | true | Show `*` for uncommitted changes |
 | `gitStatus.showAheadBehind` | boolean | false | Show `↑N ↓N` for ahead/behind remote |
 | `gitStatus.pushWarningThreshold` | number | 0 | Color the ahead count with the warning color at or above this unpushed-commit count (`0` disables it) |
 | `gitStatus.pushCriticalThreshold` | number | 0 | Color the ahead count with the critical color at or above this unpushed-commit count (`0` disables it) |
 | `gitStatus.showFileStats` | boolean | false | Show inline line-diff counter `+A -D` next to the branch on the project line. In compact (single-line) layout it instead emits the Starship-style `!M +A ✘D ?U` summary. |
-| `gitStatus.showFileList` | boolean | false | Show the bottom multi-line list of changed files (`~src/foo.ts(+5 -3)  +src/new.ts  ?2`). Independent of `showFileStats` so you can keep the inline counter without the bottom list. |
+| `gitStatus.showFileList` | boolean | false | Show the bottom multi-line list of changed files (`~src/foo.ts(+5 -3)  +src/new.ts  ?2`). Independent of `showFileStats` so you can keep the inline counter without the bottom list. When unset, falls back to `showFileStats` for upstream compat. |
+| `gitStatus.branchOverflow` | `truncate` \| `wrap` | `truncate` | In **pipes** mode only, `wrap` lets a long branch name render on its own line (project + `git:(...)` become two parts joined by ` │ `). Inherited from upstream. |
 | `display.showModel` | boolean | true | Show model name `[Opus]` |
 | `display.showContextBar` | boolean | true | Show visual context bar `████░░░░░░` |
 | `display.contextValue` | `percent` \| `tokens` \| `remaining` \| `both` | `percent` | Context display format (`45%`, `45k/200k`, `55%` remaining, or `45% (45k/200k)`) |
@@ -164,6 +166,13 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
 | `display.showPendingPermission` | boolean | true | Inline `? <target>` hint on the project line while an Edit/Write/Bash permission prompt is pending (≤3s window) |
 | `display.showLastRequestTokens` | boolean | false | Inline `last: 12k→678` counter showing the most recent assistant turn's input and output tokens; appends `(+Xk)` when reasoning tokens are present |
+| `display.showEffortLevel` | boolean | false | Append the active reasoning effort to the model bracket, e.g. `[Opus · high]`. Inherited from upstream. |
+| `display.showPromptCache` | boolean | false | Show a dedicated prompt-cache countdown line (`promptCache` element). Inherited from upstream. |
+| `display.promptCacheTtlSeconds` | number | 300 | Prompt-cache TTL used to compute the countdown on the prompt-cache line. Inherited from upstream. |
+| `display.timeFormat` | `relative` \| `absolute` \| `both` | `relative` | Reset-time format for usage windows: `relative` = `in 1h 30m`, `absolute` = `at 5:30 PM`, `both` = both. Inherited from upstream. |
+| `display.showResetLabel` | boolean | true | Toggle the `resets in` / `resets at` prefix on reset-time suffixes. Inherited from upstream. |
+| `display.usageCompact` | boolean | false | Shorter usage display — `5h: 25% (1h 30m)` instead of the full bar. Inherited from upstream. |
+| `display.mergeGroups` | `HudElement[][]` | `[["context","usage"]]` | Expanded-layout element groups that merge onto a single line when adjacent in `elementOrder`. Set `[]` to disable. Inherited from upstream. |
 | `display.projectStyle` | `pipes` \| `natural` | `pipes` | Project-line layout. `pipes` keeps the classic `[Opus] │ project git:(branch)` shape. `natural` switches to a starship-style `<glyph> Opus in project on branch` prose layout, drops `[]` brackets and `git:( )` wrappers, and uses `display.naturalSeparator` between segments. |
 | `display.naturalSeparator` | string (≤8 chars) | ` · ` | Separator inserted between sections in `natural` project style (and between Context/Usage when they share a line in expanded layout). Examples: `" · "`, `" | "`, `" "`, `"  "`. |
 | `display.modelGlyph` | string (≤8 chars) | `` (Nerd Font sparkle `nf-cod-sparkle`, U+EC10) | Glyph rendered immediately before the model name in `natural` project style. Set to `""` to disable. Pick a glyph that exists in your terminal font — older Nerd Font patches without the codicon block won't show U+EBxx/ECxx; FontAwesome range (U+F000–U+F2E0) is the safest fallback (try `` U+F0D0 wand or `` U+F2DC snowflake). |
