@@ -4,6 +4,26 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-04-20 — MomePP fork
+
+Follow-up audit after the 0.2.0 rebase caught three more fork fields
+that upstream's files silently stopped honoring. All fixed here:
+
+### Fixed
+- `display.naturalSeparator` is now honored between merged elements in
+  expanded layout (Context + Usage). Upstream's `render/index.ts`
+  hardcoded ` │ ` for merge-group joins, so users on
+  `projectStyle: "natural"` saw prose separators on the project line
+  but the pipes-style ` │ ` on the Context/Usage line.
+- Compact (`lineLayout: "compact"`) duration now respects
+  `display.projectStyle`, `display.durationGlyph`, and
+  `colors.duration` the same way expanded mode does. Previously the
+  compact renderer hardcoded `⏱️` and used `colors.label`.
+- Compact mode now renders the fork inline indicators:
+  `∿ thinking` (colored by `colors.thinking`),
+  `? <target> (waiting Ns)`, and `last: 12k→678`. These were dropped
+  when we took upstream's `session-line.ts` wholesale during the rebase.
+
 ## [0.2.1] - 2026-04-20 — MomePP fork
 
 ### Fixed

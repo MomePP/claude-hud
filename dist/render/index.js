@@ -341,7 +341,13 @@ function renderExpanded(ctx, terminalWidth = null) {
                 }))
                     .filter((entry) => typeof entry.line === 'string' && entry.line.length > 0);
                 if (renderedGroupLines.length > 1) {
-                    const combinedLine = renderedGroupLines.map(({ line }) => line).join(' │ ');
+                    // Natural-style fork: honor display.naturalSeparator between merged
+                    // elements (otherwise Context + Usage would still show the pipes-
+                    // style ` │ ` even when the project line uses prose separators).
+                    const mergeSep = ctx.config?.display?.projectStyle === 'natural'
+                        ? (ctx.config?.display?.naturalSeparator || ' \u00B7 ')
+                        : ' \u2502 ';
+                    const combinedLine = renderedGroupLines.map(({ line }) => line).join(mergeSep);
                     const widthIsReal = terminalWidth && terminalWidth !== UNKNOWN_TERMINAL_WIDTH;
                     const canCombine = !widthIsReal || visualLength(combinedLine) <= terminalWidth;
                     if (canCombine) {
