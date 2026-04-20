@@ -12,6 +12,8 @@ export type GitBranchOverflowMode = 'truncate' | 'wrap';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -28,6 +30,8 @@ export interface HudColorOverrides {
     gitBranch: HudColorValue;
     label: HudColorValue;
     custom: HudColorValue;
+    thinking: HudColorValue;
+    duration: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
@@ -43,6 +47,7 @@ export interface HudConfig {
         showDirty: boolean;
         showAheadBehind: boolean;
         showFileStats: boolean;
+        showFileList: boolean;
         branchOverflow: GitBranchOverflowMode;
         pushWarningThreshold: number;
         pushCriticalThreshold: number;
@@ -72,6 +77,9 @@ export interface HudConfig {
         promptCacheTtlSeconds: number;
         showSessionTokens: boolean;
         showOutputStyle: boolean;
+        showThinkingIndicator: boolean;
+        showPendingPermission: boolean;
+        showLastRequestTokens: boolean;
         mergeGroups: HudElement[][];
         autocompactBuffer: AutocompactBufferMode;
         usageThreshold: number;
@@ -81,6 +89,13 @@ export interface HudConfig {
         modelOverride: string;
         customLine: string;
         timeFormat: TimeFormatMode;
+        projectStyle: ProjectStyleMode;
+        naturalSeparator: string;
+        modelGlyph: string;
+        projectGlyph: string;
+        branchGlyph: string;
+        durationGlyph: string;
+        barStyle: BarStyleMode;
     };
     colors: HudColorOverrides;
 }

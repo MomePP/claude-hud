@@ -108,6 +108,14 @@ export function custom(text: string, colors?: Partial<HudColorOverrides>): strin
   return withOverride(text, colors?.custom, CLAUDE_ORANGE);
 }
 
+export function thinking(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.thinking, DIM);
+}
+
+export function duration(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.duration, DIM);
+}
+
 export function warning(text: string, colors?: Partial<HudColorOverrides>): string {
   return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }
@@ -128,20 +136,38 @@ export function getQuotaColor(percent: number, colors?: Partial<HudColorOverride
   return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
 
-export function quotaBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+export type BarStyleName = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+
+const BAR_CHARS: Record<BarStyleName, { filled: string; empty: string }> = {
+  block:    { filled: '█', empty: '░' },
+  square:   { filled: '▰', empty: '▱' },
+  thin:     { filled: '━', empty: '─' },
+  vertical: { filled: '▮', empty: '▯' },
+  dots:     { filled: '●', empty: '○' },
+  shade:    { filled: '▓', empty: '░' },
+  double:   { filled: '═', empty: '─' },
+};
+
+function barChars(style: BarStyleName | undefined): { filled: string; empty: string } {
+  return BAR_CHARS[style ?? 'block'] ?? BAR_CHARS.block;
+}
+
+export function quotaBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
   const color = getQuotaColor(safePercent, colors);
-  return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+  const chars = barChars(style);
+  return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }
 
-export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
   const color = getContextColor(safePercent, colors);
-  return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+  const chars = barChars(style);
+  return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }

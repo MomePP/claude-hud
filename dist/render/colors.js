@@ -86,6 +86,12 @@ export function label(text, colors) {
 export function custom(text, colors) {
     return withOverride(text, colors?.custom, CLAUDE_ORANGE);
 }
+export function thinking(text, colors) {
+    return withOverride(text, colors?.thinking, DIM);
+}
+export function duration(text, colors) {
+    return withOverride(text, colors?.duration, DIM);
+}
 export function warning(text, colors) {
     return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }
@@ -106,20 +112,34 @@ export function getQuotaColor(percent, colors) {
         return resolveAnsi(colors?.usageWarning, BRIGHT_MAGENTA);
     return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
-export function quotaBar(percent, width = 10, colors) {
+const BAR_CHARS = {
+    block: { filled: '█', empty: '░' },
+    square: { filled: '▰', empty: '▱' },
+    thin: { filled: '━', empty: '─' },
+    vertical: { filled: '▮', empty: '▯' },
+    dots: { filled: '●', empty: '○' },
+    shade: { filled: '▓', empty: '░' },
+    double: { filled: '═', empty: '─' },
+};
+function barChars(style) {
+    return BAR_CHARS[style ?? 'block'] ?? BAR_CHARS.block;
+}
+export function quotaBar(percent, width = 10, colors, style) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
     const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
     const color = getQuotaColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+    const chars = barChars(style);
+    return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }
-export function coloredBar(percent, width = 10, colors) {
+export function coloredBar(percent, width = 10, colors, style) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
     const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
     const color = getContextColor(safePercent, colors);
-    return `${color}${'█'.repeat(filled)}${DIM}${'░'.repeat(empty)}${RESET}`;
+    const chars = barChars(style);
+    return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }
 //# sourceMappingURL=colors.js.map

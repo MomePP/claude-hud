@@ -2,9 +2,8 @@
 node_modules/
 
 # Build artifacts
-# dist/ is gitignored but exists on main - CI builds and commits it after each merge.
-# See .github/workflows/build-dist.yml
-dist/
+# This fork tracks dist/ directly (see CLAUDE.md). Run `npm run build` before
+# committing source changes so the shipped bundle stays in sync.
 *.tsbuildinfo
 
 # Logs

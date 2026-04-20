@@ -29,6 +29,7 @@ export const DEFAULT_CONFIG = {
         showDirty: true,
         showAheadBehind: false,
         showFileStats: false,
+        showFileList: false,
         branchOverflow: 'truncate',
         pushWarningThreshold: 0,
         pushCriticalThreshold: 0,
@@ -58,6 +59,9 @@ export const DEFAULT_CONFIG = {
         promptCacheTtlSeconds: 300,
         showSessionTokens: false,
         showOutputStyle: false,
+        showThinkingIndicator: true,
+        showPendingPermission: true,
+        showLastRequestTokens: false,
         mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
         autocompactBuffer: 'enabled',
         usageThreshold: 0,
@@ -67,6 +71,13 @@ export const DEFAULT_CONFIG = {
         modelOverride: '',
         customLine: '',
         timeFormat: 'relative',
+        projectStyle: 'pipes',
+        naturalSeparator: ' \u00B7 ',
+        modelGlyph: '\uec10',
+        projectGlyph: '\uf114',
+        branchGlyph: '\ue725',
+        durationGlyph: '\uf017',
+        barStyle: 'block',
     },
     colors: {
         context: 'green',
@@ -74,12 +85,14 @@ export const DEFAULT_CONFIG = {
         warning: 'yellow',
         usageWarning: 'brightMagenta',
         critical: 'red',
-        model: 'cyan',
-        project: 'yellow',
+        model: 'green',
+        project: 'cyan',
         git: 'magenta',
-        gitBranch: 'cyan',
+        gitBranch: 'brightMagenta',
         label: 'dim',
         custom: 208,
+        thinking: 'dim',
+        duration: 'dim',
     },
 };
 export function getConfigPath() {
@@ -109,6 +122,18 @@ function validateModelFormat(value) {
 }
 function validateTimeFormat(value) {
     return value === 'relative' || value === 'absolute' || value === 'both';
+}
+function validateProjectStyle(value) {
+    return value === 'pipes' || value === 'natural';
+}
+function validateBarStyle(value) {
+    return value === 'block'
+        || value === 'square'
+        || value === 'thin'
+        || value === 'vertical'
+        || value === 'dots'
+        || value === 'shade'
+        || value === 'double';
 }
 function validateColorName(value) {
     return value === 'dim'
@@ -153,40 +178,36 @@ function validateMergeGroups(value) {
     if (!Array.isArray(value)) {
         return DEFAULT_MERGE_GROUPS.map(group => [...group]);
     }
-    if (value.length === 0) {
-        return [];
-    }
-    const usedElements = new Set();
-    const mergeGroups = [];
-    for (const group of value) {
-        if (!Array.isArray(group)) {
+    const groups = [];
+    for (const rawGroup of value) {
+        if (!Array.isArray(rawGroup))
             continue;
-        }
-        const seenInGroup = new Set();
-        const normalizedGroup = [];
-        const pendingElements = [];
-        for (const item of group) {
-            if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item)) {
+        const seen = new Set();
+        const group = [];
+        for (const item of rawGroup) {
+            if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item))
                 continue;
-            }
-            const element = item;
-            if (seenInGroup.has(element) || usedElements.has(element)) {
+            const el = item;
+            if (seen.has(el))
                 continue;
-            }
-            seenInGroup.add(element);
-            normalizedGroup.push(element);
-            pendingElements.push(element);
+            seen.add(el);
+            group.push(el);
         }
-        if (normalizedGroup.length >= 2) {
-            for (const element of pendingElements) {
-                usedElements.add(element);
-            }
-            mergeGroups.push(normalizedGroup);
-        }
+        if (group.length >= 2)
+            groups.push(group);
     }
-    return mergeGroups.length > 0
-        ? mergeGroups
-        : DEFAULT_MERGE_GROUPS.map(group => [...group]);
+    return groups;
+}
+function validateMaxWidth(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+        return null;
+    return Math.floor(value);
+}
+function validatePromptCacheTtl(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        return DEFAULT_CONFIG.display.promptCacheTtlSeconds;
+    }
+    return Math.floor(value);
 }
 function migrateConfig(userConfig) {
     const migrated = { ...userConfig };
@@ -227,12 +248,6 @@ function validateCountThreshold(value) {
     }
     return Math.max(0, Math.floor(value));
 }
-function validateDurationSeconds(value, fallback) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-        return fallback;
-    }
-    return Math.floor(value);
-}
 export function mergeConfig(userConfig) {
     const migrated = migrateConfig(userConfig);
     const language = validateLanguage(migrated.language)
@@ -247,10 +262,7 @@ export function mergeConfig(userConfig) {
     const pathLevels = validatePathLevels(migrated.pathLevels)
         ? migrated.pathLevels
         : DEFAULT_CONFIG.pathLevels;
-    const rawMaxWidth = migrated.maxWidth;
-    const maxWidth = (typeof rawMaxWidth === 'number' && Number.isFinite(rawMaxWidth) && rawMaxWidth > 0)
-        ? Math.floor(rawMaxWidth)
-        : null;
+    const maxWidth = validateMaxWidth(migrated.maxWidth);
     const elementOrder = validateElementOrder(migrated.elementOrder);
     const gitStatus = {
         enabled: typeof migrated.gitStatus?.enabled === 'boolean'
@@ -265,6 +277,9 @@ export function mergeConfig(userConfig) {
         showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
             ? migrated.gitStatus.showFileStats
             : DEFAULT_CONFIG.gitStatus.showFileStats,
+        showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+            ? migrated.gitStatus.showFileList
+            : DEFAULT_CONFIG.gitStatus.showFileList,
         branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
             ? migrated.gitStatus.branchOverflow
             : DEFAULT_CONFIG.gitStatus.branchOverflow,
@@ -335,13 +350,22 @@ export function mergeConfig(userConfig) {
         showPromptCache: typeof migrated.display?.showPromptCache === 'boolean'
             ? migrated.display.showPromptCache
             : DEFAULT_CONFIG.display.showPromptCache,
-        promptCacheTtlSeconds: validateDurationSeconds(migrated.display?.promptCacheTtlSeconds, DEFAULT_CONFIG.display.promptCacheTtlSeconds),
+        promptCacheTtlSeconds: validatePromptCacheTtl(migrated.display?.promptCacheTtlSeconds),
         showSessionTokens: typeof migrated.display?.showSessionTokens === 'boolean'
             ? migrated.display.showSessionTokens
             : DEFAULT_CONFIG.display.showSessionTokens,
         showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
             ? migrated.display.showOutputStyle
             : DEFAULT_CONFIG.display.showOutputStyle,
+        showThinkingIndicator: typeof migrated.display?.showThinkingIndicator === 'boolean'
+            ? migrated.display.showThinkingIndicator
+            : DEFAULT_CONFIG.display.showThinkingIndicator,
+        showPendingPermission: typeof migrated.display?.showPendingPermission === 'boolean'
+            ? migrated.display.showPendingPermission
+            : DEFAULT_CONFIG.display.showPendingPermission,
+        showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
+            ? migrated.display.showLastRequestTokens
+            : DEFAULT_CONFIG.display.showLastRequestTokens,
         mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
@@ -361,6 +385,27 @@ export function mergeConfig(userConfig) {
         timeFormat: validateTimeFormat(migrated.display?.timeFormat)
             ? migrated.display.timeFormat
             : DEFAULT_CONFIG.display.timeFormat,
+        projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+            ? migrated.display.projectStyle
+            : DEFAULT_CONFIG.display.projectStyle,
+        naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+            ? migrated.display.naturalSeparator.slice(0, 8)
+            : DEFAULT_CONFIG.display.naturalSeparator,
+        modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+            ? migrated.display.modelGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.modelGlyph,
+        projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+            ? migrated.display.projectGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.projectGlyph,
+        branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+            ? migrated.display.branchGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.branchGlyph,
+        durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+            ? migrated.display.durationGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.durationGlyph,
+        barStyle: validateBarStyle(migrated.display?.barStyle)
+            ? migrated.display.barStyle
+            : DEFAULT_CONFIG.display.barStyle,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)
@@ -396,6 +441,12 @@ export function mergeConfig(userConfig) {
         custom: validateColorValue(migrated.colors?.custom)
             ? migrated.colors.custom
             : DEFAULT_CONFIG.colors.custom,
+        thinking: validateColorValue(migrated.colors?.thinking)
+            ? migrated.colors.thinking
+            : DEFAULT_CONFIG.colors.thinking,
+        duration: validateColorValue(migrated.colors?.duration)
+            ? migrated.colors.duration
+            : DEFAULT_CONFIG.colors.duration,
     };
     return { language, lineLayout, showSeparators, pathLevels, maxWidth, elementOrder, gitStatus, display, colors };
 }

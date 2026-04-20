@@ -19,6 +19,8 @@ export type GitBranchOverflowMode = 'truncate' | 'wrap';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
@@ -45,6 +47,8 @@ export interface HudColorOverrides {
   gitBranch: HudColorValue;
   label: HudColorValue;
   custom: HudColorValue;
+  thinking: HudColorValue;
+  duration: HudColorValue;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -77,6 +81,7 @@ export interface HudConfig {
     showDirty: boolean;
     showAheadBehind: boolean;
     showFileStats: boolean;
+    showFileList: boolean;
     branchOverflow: GitBranchOverflowMode;
     pushWarningThreshold: number;
     pushCriticalThreshold: number;
@@ -106,6 +111,9 @@ export interface HudConfig {
     promptCacheTtlSeconds: number;
     showSessionTokens: boolean;
     showOutputStyle: boolean;
+    showThinkingIndicator: boolean;
+    showPendingPermission: boolean;
+    showLastRequestTokens: boolean;
     mergeGroups: HudElement[][];
     autocompactBuffer: AutocompactBufferMode;
     usageThreshold: number;
@@ -115,6 +123,13 @@ export interface HudConfig {
     modelOverride: string;
     customLine: string;
     timeFormat: TimeFormatMode;
+    projectStyle: ProjectStyleMode;
+    naturalSeparator: string;
+    modelGlyph: string;
+    projectGlyph: string;
+    branchGlyph: string;
+    durationGlyph: string;
+    barStyle: BarStyleMode;
   };
   colors: HudColorOverrides;
 }
@@ -131,6 +146,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showDirty: true,
     showAheadBehind: false,
     showFileStats: false,
+    showFileList: false,
     branchOverflow: 'truncate',
     pushWarningThreshold: 0,
     pushCriticalThreshold: 0,
@@ -160,6 +176,9 @@ export const DEFAULT_CONFIG: HudConfig = {
     promptCacheTtlSeconds: 300,
     showSessionTokens: false,
     showOutputStyle: false,
+    showThinkingIndicator: true,
+    showPendingPermission: true,
+    showLastRequestTokens: false,
     mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
     autocompactBuffer: 'enabled',
     usageThreshold: 0,
@@ -169,6 +188,13 @@ export const DEFAULT_CONFIG: HudConfig = {
     modelOverride: '',
     customLine: '',
     timeFormat: 'relative',
+    projectStyle: 'pipes',
+    naturalSeparator: ' \u00B7 ',
+    modelGlyph: '\uec10',
+    projectGlyph: '\uf114',
+    branchGlyph: '\ue725',
+    durationGlyph: '\uf017',
+    barStyle: 'block',
   },
   colors: {
     context: 'green',
@@ -176,12 +202,14 @@ export const DEFAULT_CONFIG: HudConfig = {
     warning: 'yellow',
     usageWarning: 'brightMagenta',
     critical: 'red',
-    model: 'cyan',
-    project: 'yellow',
+    model: 'green',
+    project: 'cyan',
     git: 'magenta',
-    gitBranch: 'cyan',
+    gitBranch: 'brightMagenta',
     label: 'dim',
     custom: 208,
+    thinking: 'dim',
+    duration: 'dim',
   },
 };
 
@@ -220,6 +248,20 @@ function validateModelFormat(value: unknown): value is ModelFormatMode {
 
 function validateTimeFormat(value: unknown): value is TimeFormatMode {
   return value === 'relative' || value === 'absolute' || value === 'both';
+}
+
+function validateProjectStyle(value: unknown): value is ProjectStyleMode {
+  return value === 'pipes' || value === 'natural';
+}
+
+function validateBarStyle(value: unknown): value is BarStyleMode {
+  return value === 'block'
+    || value === 'square'
+    || value === 'thin'
+    || value === 'vertical'
+    || value === 'dots'
+    || value === 'shade'
+    || value === 'double';
 }
 
 function validateColorName(value: unknown): value is HudColorName {
@@ -271,49 +313,33 @@ function validateMergeGroups(value: unknown): HudElement[][] {
   if (!Array.isArray(value)) {
     return DEFAULT_MERGE_GROUPS.map(group => [...group]);
   }
-
-  if (value.length === 0) {
-    return [];
+  const groups: HudElement[][] = [];
+  for (const rawGroup of value) {
+    if (!Array.isArray(rawGroup)) continue;
+    const seen = new Set<HudElement>();
+    const group: HudElement[] = [];
+    for (const item of rawGroup) {
+      if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item as HudElement)) continue;
+      const el = item as HudElement;
+      if (seen.has(el)) continue;
+      seen.add(el);
+      group.push(el);
+    }
+    if (group.length >= 2) groups.push(group);
   }
+  return groups;
+}
 
-  const usedElements = new Set<HudElement>();
-  const mergeGroups: HudElement[][] = [];
+function validateMaxWidth(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
 
-  for (const group of value) {
-    if (!Array.isArray(group)) {
-      continue;
-    }
-
-    const seenInGroup = new Set<HudElement>();
-    const normalizedGroup: HudElement[] = [];
-    const pendingElements: HudElement[] = [];
-
-    for (const item of group) {
-      if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item as HudElement)) {
-        continue;
-      }
-
-      const element = item as HudElement;
-      if (seenInGroup.has(element) || usedElements.has(element)) {
-        continue;
-      }
-
-      seenInGroup.add(element);
-      normalizedGroup.push(element);
-      pendingElements.push(element);
-    }
-
-    if (normalizedGroup.length >= 2) {
-      for (const element of pendingElements) {
-        usedElements.add(element);
-      }
-      mergeGroups.push(normalizedGroup);
-    }
+function validatePromptCacheTtl(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_CONFIG.display.promptCacheTtlSeconds;
   }
-
-  return mergeGroups.length > 0
-    ? mergeGroups
-    : DEFAULT_MERGE_GROUPS.map(group => [...group]);
+  return Math.floor(value);
 }
 
 interface LegacyConfig {
@@ -358,13 +384,6 @@ function validateCountThreshold(value: unknown): number {
   return Math.max(0, Math.floor(value));
 }
 
-function validateDurationSeconds(value: unknown, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return Math.floor(value);
-}
-
 export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
   const migrated = migrateConfig(userConfig);
   const language = validateLanguage(migrated.language)
@@ -383,10 +402,7 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     ? migrated.pathLevels
     : DEFAULT_CONFIG.pathLevels;
 
-  const rawMaxWidth = (migrated as Record<string, unknown>).maxWidth;
-  const maxWidth = (typeof rawMaxWidth === 'number' && Number.isFinite(rawMaxWidth) && rawMaxWidth > 0)
-    ? Math.floor(rawMaxWidth)
-    : null;
+  const maxWidth = validateMaxWidth(migrated.maxWidth);
 
   const elementOrder = validateElementOrder(migrated.elementOrder);
 
@@ -403,6 +419,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
       ? migrated.gitStatus.showFileStats
       : DEFAULT_CONFIG.gitStatus.showFileStats,
+    showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+      ? migrated.gitStatus.showFileList
+      : DEFAULT_CONFIG.gitStatus.showFileList,
     branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
       ? migrated.gitStatus.branchOverflow
       : DEFAULT_CONFIG.gitStatus.branchOverflow,
@@ -474,16 +493,22 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showPromptCache: typeof migrated.display?.showPromptCache === 'boolean'
       ? migrated.display.showPromptCache
       : DEFAULT_CONFIG.display.showPromptCache,
-    promptCacheTtlSeconds: validateDurationSeconds(
-      migrated.display?.promptCacheTtlSeconds,
-      DEFAULT_CONFIG.display.promptCacheTtlSeconds,
-    ),
+    promptCacheTtlSeconds: validatePromptCacheTtl(migrated.display?.promptCacheTtlSeconds),
     showSessionTokens: typeof migrated.display?.showSessionTokens === 'boolean'
       ? migrated.display.showSessionTokens
       : DEFAULT_CONFIG.display.showSessionTokens,
     showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
       ? migrated.display.showOutputStyle
       : DEFAULT_CONFIG.display.showOutputStyle,
+    showThinkingIndicator: typeof migrated.display?.showThinkingIndicator === 'boolean'
+      ? migrated.display.showThinkingIndicator
+      : DEFAULT_CONFIG.display.showThinkingIndicator,
+    showPendingPermission: typeof migrated.display?.showPendingPermission === 'boolean'
+      ? migrated.display.showPendingPermission
+      : DEFAULT_CONFIG.display.showPendingPermission,
+    showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
+      ? migrated.display.showLastRequestTokens
+      : DEFAULT_CONFIG.display.showLastRequestTokens,
     mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer
@@ -503,6 +528,27 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     timeFormat: validateTimeFormat(migrated.display?.timeFormat)
       ? migrated.display.timeFormat
       : DEFAULT_CONFIG.display.timeFormat,
+    projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+      ? migrated.display.projectStyle
+      : DEFAULT_CONFIG.display.projectStyle,
+    naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+      ? migrated.display.naturalSeparator.slice(0, 8)
+      : DEFAULT_CONFIG.display.naturalSeparator,
+    modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+      ? migrated.display.modelGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.modelGlyph,
+    projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+      ? migrated.display.projectGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.projectGlyph,
+    branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+      ? migrated.display.branchGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.branchGlyph,
+    durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+      ? migrated.display.durationGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.durationGlyph,
+    barStyle: validateBarStyle(migrated.display?.barStyle)
+      ? migrated.display.barStyle
+      : DEFAULT_CONFIG.display.barStyle,
   };
 
   const colors = {
@@ -539,6 +585,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     custom: validateColorValue(migrated.colors?.custom)
       ? migrated.colors.custom
       : DEFAULT_CONFIG.colors.custom,
+    thinking: validateColorValue(migrated.colors?.thinking)
+      ? migrated.colors.thinking
+      : DEFAULT_CONFIG.colors.thinking,
+    duration: validateColorValue(migrated.colors?.duration)
+      ? migrated.colors.duration
+      : DEFAULT_CONFIG.colors.duration,
   };
 
   return { language, lineLayout, showSeparators, pathLevels, maxWidth, elementOrder, gitStatus, display, colors };
