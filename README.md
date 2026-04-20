@@ -1,72 +1,50 @@
-# Claude HUD
+# Claude HUD — MomePP fork
 
 A Claude Code plugin that shows what's happening — context usage, active tools, running agents, and todo progress. Always visible below your input.
 
-[![License](https://img.shields.io/github/license/jarrodwatts/claude-hud?v=2)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/jarrodwatts/claude-hud)](https://github.com/jarrodwatts/claude-hud/stargazers)
+**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC) and my own workflow. If you're looking for the upstream, go there — this one is deliberately narrower in scope.
 
 ![Claude HUD in action](claude-hud-preview-5-2.png)
 
-> 🌐 English | [中文文档](README.zh.md)
+## Why this fork exists
+
+| What upstream does | What this fork does |
+|---|---|
+| Displays `unknown` when an Agent tool call omits `subagent_type` | Falls back to the caller-supplied `name`, then `general-purpose` (the actual Claude Code default) |
+| Doesn't understand OMC's `proxy_Edit` / `proxy_Task` / etc. | Strips `proxy_` and routes them identically to native tools |
+| Leaves background (`run_in_background`) agents stuck as "running" forever | Parses `<task-notification>` blocks to mark them completed |
+| Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long session perf win) |
+| Cross-platform (darwin / linux / win32 / powershell) | **macOS/Linux only** — Windows branches removed from setup |
+| CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
+| Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships a launcher at `scripts/claude-hud.sh`; `settings.json` just points at it |
+| Agent labels render as `oh-my-claudecode:explore` | Strips the `namespace:` prefix and capitalizes — shows as `Explore` |
+| — | Thinking-state and pending-permission indicators on the project line |
+
+## Limitations
+
+- **macOS / Linux only.** No Windows support — setup.md and CI paths for `win32` / PowerShell were removed. The source still tolerates `process.platform === 'win32'` incidentally (for case-insensitive path compares), but nothing is tested there.
+- **No automated CI.** Tests and builds run locally. Dependency bumps won't be auto-gated; you're on your own to verify.
+- **Remember to rebuild.** `dist/` is tracked — run `npm run build` before committing source changes so the shipped bundle stays in sync.
+- **Upstream drift.** I cherry-pick upstream changes occasionally; this is not a live mirror.
 
 ## Install
 
-Inside a Claude Code instance, run the following commands:
-
-**Step 1: Add the marketplace**
 ```
-/plugin marketplace add jarrodwatts/claude-hud
-```
-
-**Step 2: Install the plugin**
-
-<details>
-<summary><strong>⚠️ Linux users: Click here first</strong></summary>
-
-On Linux, `/tmp` is often a separate filesystem (tmpfs), which causes plugin installation to fail with:
-```
-EXDEV: cross-device link not permitted
+/plugin marketplace add MomePP/claude-hud
+/plugin install claude-hud
+/reload-plugins
+/claude-hud:setup
 ```
 
-**Fix**: Set TMPDIR before installing:
+Then quit Claude Code and relaunch so the new `statusLine` config takes effect.
+
+Linux users: if the install fails with `EXDEV: cross-device link not permitted`, set `TMPDIR` to a path on the same filesystem as your home directory before installing:
+
 ```bash
 mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 ```
 
-Then run the install command below in that session. This is a [Claude Code platform limitation](https://github.com/anthropics/claude-code/issues/14799).
-
-</details>
-
-```
-/plugin install claude-hud
-```
-
-After that, reload plugins:
-
-```
-/reload-plugins
-```
-
-
-**Step 3: Configure the statusline**
-```
-/claude-hud:setup
-```
-
-<details>
-<summary><strong>⚠️ Windows users: Click here if setup says no JavaScript runtime was found</strong></summary>
-
-On Windows, Node.js LTS is the supported runtime for Claude HUD setup. If setup says no JavaScript runtime was found, install Node.js for your shell first:
-```powershell
-winget install OpenJS.NodeJS.LTS
-```
-Then restart your shell and run `/claude-hud:setup` again.
-
-</details>
-
-Done! Restart Claude Code to load the new statusLine config, then the HUD will appear.
-
-On Windows, make that a full Claude Code restart after setup writes the new `statusLine` config.
+This is a [Claude Code platform limitation](https://github.com/anthropics/claude-code/issues/14799).
 
 ---
 
@@ -146,9 +124,7 @@ After choosing a preset, you can turn individual elements on or off.
 ### Manual Configuration
 
 Edit `~/.claude/plugins/claude-hud/config.json` directly for advanced settings such as `colors.*`,
-`pathLevels`, `maxWidth`, threshold overrides, `display.timeFormat`, and `display.promptCacheTtlSeconds`. Running `/claude-hud:configure`
-preserves those manual settings while still letting you change `language`, layout, and the common
-guided toggles.
+`pathLevels`, and threshold overrides. Running `/claude-hud:configure` preserves those manual settings while still letting you change `language`, layout, and the common guided toggles.
 
 Chinese HUD labels are available as an explicit opt-in. English stays the default unless you choose `中文` in `/claude-hud:configure` or set `language` in config.
 
@@ -159,17 +135,14 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `language` | `en` \| `zh` | `en` | HUD label language. English is the default; set `zh` to enable Chinese labels. |
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
-| `maxWidth` | number \| `null` | `null` | Optional fallback width used only when terminal width detection fails completely |
-<<<<<<< HEAD
-| `elementOrder` | string[] | `["project","context","usage","promptCache","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
-| `display.mergeGroups` | string[][] | `[["context","usage"]]` | Expanded-mode groups that should share a line when adjacent. Set `[]` to disable merged lines. |
+| `elementOrder` | string[] | `["project","context","usage","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
 | `gitStatus.enabled` | boolean | true | Show git branch in HUD |
 | `gitStatus.showDirty` | boolean | true | Show `*` for uncommitted changes |
 | `gitStatus.showAheadBehind` | boolean | false | Show `↑N ↓N` for ahead/behind remote |
 | `gitStatus.pushWarningThreshold` | number | 0 | Color the ahead count with the warning color at or above this unpushed-commit count (`0` disables it) |
 | `gitStatus.pushCriticalThreshold` | number | 0 | Color the ahead count with the critical color at or above this unpushed-commit count (`0` disables it) |
-| `gitStatus.showFileStats` | boolean | false | Show file change counts `!M +A ✘D ?U` |
-| `gitStatus.branchOverflow` | `truncate` \| `wrap` | `truncate` | Keep current truncation behavior or let the git block wrap onto its own line boundary when possible |
+| `gitStatus.showFileStats` | boolean | false | Show inline line-diff counter `+A -D` next to the branch on the project line. In compact (single-line) layout it instead emits the Starship-style `!M +A ✘D ?U` summary. |
+| `gitStatus.showFileList` | boolean | false | Show the bottom multi-line list of changed files (`~src/foo.ts(+5 -3)  +src/new.ts  ?2`). Independent of `showFileStats` so you can keep the inline counter without the bottom list. |
 | `display.showModel` | boolean | true | Show model name `[Opus]` |
 | `display.showContextBar` | boolean | true | Show visual context bar `████░░░░░░` |
 | `display.contextValue` | `percent` \| `tokens` \| `remaining` \| `both` | `percent` | Context display format (`45%`, `45k/200k`, `55%` remaining, or `45% (45k/200k)`) |
@@ -180,9 +153,6 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showSpeed` | boolean | false | Show output token speed `out: 42.1 tok/s` |
 | `display.showUsage` | boolean | true | Show Claude subscriber usage limits when available |
 | `display.usageBarEnabled` | boolean | true | Display usage as visual bar instead of text |
-| `display.usageCompact` | boolean | false | Display usage in a shorter text form such as `5h: 25% (1h 30m)`; takes precedence over `display.usageBarEnabled` |
-| `display.showResetLabel` | boolean | true | Show the `resets in` prefix before usage countdowns |
-| `display.timeFormat` | `relative` \| `absolute` \| `both` | `relative` | How reset times are shown in usage windows: countdown only (`resets in 2h 30m`), wall-clock time (`resets at 14:30`), or both (`resets in 2h 30m, at 14:30`) |
 | `display.sevenDayThreshold` | 0-100 | 80 | Show 7-day usage when >= threshold (0 = always) |
 | `display.showTokenBreakdown` | boolean | true | Show token details at high context (85%+) |
 | `display.showTools` | boolean | false | Show tools activity line |
@@ -191,27 +161,49 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showSessionName` | boolean | false | Show session slug or custom title from `/rename` |
 | `display.showClaudeCodeVersion` | boolean | false | Show the installed Claude Code version, e.g. `CC v2.1.81` |
 | `display.showMemoryUsage` | boolean | false | Show an approximate system RAM usage line in expanded layout |
-| `display.showPromptCache` | boolean | false | Show a prompt cache countdown based on the last assistant response timestamp in the transcript |
-| `display.promptCacheTtlSeconds` | number | `300` | Prompt cache TTL in seconds. Keep the default for Pro, set `3600` for Max |
+| `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
+| `display.showPendingPermission` | boolean | true | Inline `? <target>` hint on the project line while an Edit/Write/Bash permission prompt is pending (≤3s window) |
+| `display.showLastRequestTokens` | boolean | false | Inline `last: 12k→678` counter showing the most recent assistant turn's input and output tokens; appends `(+Xk)` when reasoning tokens are present |
+| `display.projectStyle` | `pipes` \| `natural` | `pipes` | Project-line layout. `pipes` keeps the classic `[Opus] │ project git:(branch)` shape. `natural` switches to a starship-style `<glyph> Opus in project on branch` prose layout, drops `[]` brackets and `git:( )` wrappers, and uses `display.naturalSeparator` between segments. |
+| `display.naturalSeparator` | string (≤8 chars) | ` · ` | Separator inserted between sections in `natural` project style (and between Context/Usage when they share a line in expanded layout). Examples: `" · "`, `" | "`, `" "`, `"  "`. |
+| `display.modelGlyph` | string (≤8 chars) | `` (Nerd Font sparkle `nf-cod-sparkle`, U+EC10) | Glyph rendered immediately before the model name in `natural` project style. Set to `""` to disable. Pick a glyph that exists in your terminal font — older Nerd Font patches without the codicon block won't show U+EBxx/ECxx; FontAwesome range (U+F000–U+F2E0) is the safest fallback (try `` U+F0D0 wand or `` U+F2DC snowflake). |
+| `display.projectGlyph` | string (≤8 chars) | `` (Nerd Font outlined folder `nf-fa-folder_o`, U+F114) | Glyph rendered between `in` and the project name in `natural` project style. Set to `""` to disable. Try `` U+F07B filled folder, `` U+F115 open-folder, or `` U+EB83 codicon-folder. |
+| `display.branchGlyph` | string (≤8 chars) | `` (Nerd Font git-branch `nf-dev-git_branch`, U+E725) | Glyph rendered between `on` and the branch name in `natural` project style. Set to `""` to disable. Try `` U+F126 FontAwesome code-branch as a more widely-supported fallback. |
+| `display.durationGlyph` | string (≤8 chars) | `` (Nerd Font clock `nf-fa-clock_o`, U+F017) | Glyph rendered before the session-duration value (replaces the legacy ⏱️ emoji). Applies to both `pipes` and `natural` modes. Set to `""` to drop the glyph entirely, or set to `⏱️ ` to keep the emoji. |
+| `display.barStyle` | `block` \| `square` \| `thin` \| `vertical` \| `dots` \| `shade` \| `double` | `block` | Character set for context, usage, and memory bars. `block` = `█░` (default, dense), `square` = `▰▱` (starship-like), `thin` = `━─` (minimal), `vertical` = `▮▯` (recognizable progress bars), `dots` = `●○` (distinctive), `shade` = `▓░` (soft gradient), `double` = `═─` (double-line tracks). |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
 | `colors.usageWarning` | color value | `brightMagenta` | Warning color for usage bars and percentages near their threshold |
 | `colors.critical` | color value | `red` | Critical color for limit-reached states and critical thresholds |
-| `colors.model` | color value | `cyan` | Color for the model badge such as `[Opus]` |
-| `colors.project` | color value | `yellow` | Color for the project path |
+| `colors.model` | color value | `green` | Color for the model badge such as `[Opus]`. Default mirrors starship runtime/version modules so model, project, and branch each get a distinct color. |
+| `colors.project` | color value | `cyan` | Color for the project path. Default matches starship `directory`. |
 | `colors.git` | color value | `magenta` | Color for git wrapper text such as `git:(` and `)` |
-| `colors.gitBranch` | color value | `cyan` | Color for the git branch and branch status text |
+| `colors.gitBranch` | color value | `brightMagenta` | Color for the git branch and branch status text. Default matches starship `git_branch` (bold purple). |
 | `colors.label` | color value | `dim` | Color for labels and secondary metadata such as `Context`, `Usage`, counts, and progress text |
 | `colors.custom` | color value | `208` | Color for the optional custom line |
+| `colors.thinking` | color value | `dim` | Color for the inline `∿ thinking` indicator (defaults to dim so it stays out of the way; override with any named color, 256-color number, or hex). |
+| `colors.duration` | color value | `dim` | Color for the session-duration extra (the `<glyph> 1h 30m` token). Independent of `colors.label` so you can keep `Context`/`Usage` labels dim while bumping the duration. |
 
 Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brightBlue`, `brightMagenta`. You can also use a 256-color number (`0-255`) or hex (`#rrggbb`).
 
 `display.showMemoryUsage` is fully opt-in and only renders in `expanded` layout. It reports approximate system RAM usage from the local machine, not precise memory pressure inside Claude Code or a specific process. The number may overstate actual pressure because reclaimable OS cache and buffers can still be counted as used memory.
 
-`display.showCost` is fully opt-in. ClaudeHUD prefers the native `cost.total_cost_usd` field that Claude Code provides on stdin when it is available. If that field is absent or invalid for a direct Anthropic session, ClaudeHUD falls back to the existing local transcript-based estimate so the cost line still works on older payloads. The native field is absent before the first API response in a session, so the cost display may stay hidden until then. ClaudeHUD also keeps the cost hidden for known routed providers such as Bedrock, because cloud-provider billed sessions may report `$0.00` or omit the field even though the session was not literally free.
+`display.projectStyle: "natural"` is a fork-only addition that swaps the dense bracketed/piped project line for a more readable starship-style line. Compare:
 
-`display.showPromptCache` is fully opt-in. When enabled, ClaudeHUD looks at the timestamp of the last assistant response in the local transcript and shows a live countdown until the prompt cache expires. The default TTL is 5 minutes (`300` seconds). Set `display.promptCacheTtlSeconds` to `3600` if you want a 1-hour Max-style window. If the transcript does not have an assistant timestamp yet, the cache element stays hidden.
+```
+# pipes (default)
+[Opus 4.7 (1M context)] │ claude-hud git:(main*)
+
+# natural
+ Opus 4.7 (1M context) in claude-hud on main*
+```
+
+Pair it with `gitStatus.showFileStats: true` and `gitStatus.showFileList: false` to keep just the inline `+5 -3` counter without the bottom file list. The default `naturalSeparator` (` · `) is used both between core/extras on the project line and between Context and Usage when they share a line in expanded layout.
+
+`display.showThinkingIndicator`, `display.showPendingPermission`, and `display.showLastRequestTokens` are fork-only additions. Thinking and pending-permission default to on (they've shipped that way since 0.1.0 without being noisy in practice); the last-request token counter defaults to off because it renders on every assistant turn. All three share the project line, so they only appear when there's live state to show.
+
+`display.showCost` is fully opt-in. ClaudeHUD prefers the native `cost.total_cost_usd` field that Claude Code provides on stdin when it is available. If that field is absent or invalid for a direct Anthropic session, ClaudeHUD falls back to the existing local transcript-based estimate so the cost line still works on older payloads. The native field is absent before the first API response in a session, so the cost display may stay hidden until then. ClaudeHUD also keeps the cost hidden for known routed providers such as Bedrock, because cloud-provider billed sessions may report `$0.00` or omit the field even though the session was not literally free.
 
 ### Usage Limits
 
@@ -228,14 +220,6 @@ Context █████░░░░░ 45% │ Usage ██░░░░░░░
 ```
 
 To disable, set `display.showUsage` to `false`.
-
-Reset times use relative countdowns by default. Set `display.timeFormat` to `absolute` for wall-clock
-times or `both` to show both forms. This setting is manual-only today; `/claude-hud:configure`
-preserves it without editing it.
-
-Set `display.showResetLabel` to `false` if you want shorter usage countdowns such as `(3h 17m)` instead of `(resets in 3h 17m)`.
-
-Set `display.usageCompact` to `true` if you want the shorter usage-only form, for example `5h: 25% (1h 30m)`. Compact usage takes precedence over `display.usageBarEnabled`.
 
 **Requirements:**
 - Claude Code must include subscriber `rate_limits` data on stdin for the current session
@@ -308,7 +292,7 @@ Set `display.usageCompact` to `true` if you want the shorter usage-only form, fo
 
 **Config not applying?**
 - Check for JSON syntax errors: invalid JSON silently falls back to defaults
-- Ensure valid values: `pathLevels` must be 1, 2, or 3; `lineLayout` must be `expanded` or `compact`; `maxWidth` must be a positive number
+- Ensure valid values: `pathLevels` must be 1, 2, or 3; `lineLayout` must be `expanded` or `compact`
 - Delete config and run `/claude-hud:configure` to regenerate
 
 **Git status missing?**
@@ -328,30 +312,36 @@ Set `display.usageCompact` to `true` if you want the shorter usage-only form, fo
 ## Requirements
 
 - Claude Code v1.0.80+
-- macOS/Linux: Node.js 18+ or Bun
-- Windows: Node.js 18+
+- Node.js 18+ (macOS/Linux)
 
 ---
 
 ## Development
 
 ```bash
-git clone https://github.com/jarrodwatts/claude-hud
+git clone https://github.com/MomePP/claude-hud
 cd claude-hud
 npm ci && npm run build
 npm test
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+After changing anything in `src/`, rebuild and commit `dist/` alongside the source — there's no CI that will do it for you.
+
+### OMC-specific tests
+
+The parser-behavior tests for OMC compatibility (proxy_ stripping, agent fallback, background-agent completion, tail-parsing) live in `tests/transcript-omc.test.js`. Run them on their own:
+
+```bash
+node --test tests/transcript-omc.test.js
+```
 
 ---
+
+## Credit
+
+All of the HUD rendering, configuration flow, preset logic, and design choices come from
+[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of OMC-specific fixes and perf tweaks on top.
 
 ## License
 
 MIT — see [LICENSE](LICENSE)
-
----
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=jarrodwatts/claude-hud&type=Date)](https://star-history.com/#jarrodwatts/claude-hud&Date)

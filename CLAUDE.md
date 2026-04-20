@@ -96,6 +96,11 @@ Lines 1-2 always shown. Additional lines are opt-in via config:
 - Todos line (`showTodos`): ▸ Fix authentication bug (2/5)
 - Environment line (`showConfigCounts`): 2 CLAUDE.md | 4 rules
 
+Inline indicators on the project line (fork additions):
+- Thinking (`showThinkingIndicator`, default true): `∿ thinking` while extended-thinking blocks land within a 30s window.
+- Pending permission (`showPendingPermission`, default true): `? <target>` when an Edit/Write/Bash call is within its 3s approval window.
+- Last-request tokens (`showLastRequestTokens`, default false): `last: 12k→678` from the most recent assistant usage, plus `(+Xk)` when reasoning tokens are present.
+
 ### Context Thresholds
 
 | Threshold | Color | Action |
