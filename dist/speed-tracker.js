@@ -3,6 +3,11 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { getHudPluginDir } from './claude-config-dir.js';
 const SPEED_WINDOW_MS = 2000;
+// Status lines can re-render many times per second while tokens stream.
+// Computing a rate from sub-500ms windows amplifies noise and produces
+// spurious multi-thousand tok/s readings (see #481). Require at least
+// half a second of elapsed time before reporting a speed.
+const MIN_DELTA_MS = 500;
 const defaultDeps = {
     homeDir: () => os.homedir(),
     now: () => Date.now(),
@@ -52,7 +57,7 @@ export function getOutputSpeed(stdin, overrides = {}) {
     if (previous && outputTokens >= previous.outputTokens) {
         const deltaTokens = outputTokens - previous.outputTokens;
         const deltaMs = now - previous.timestamp;
-        if (deltaTokens > 0 && deltaMs > 0 && deltaMs <= SPEED_WINDOW_MS) {
+        if (deltaTokens > 0 && deltaMs >= MIN_DELTA_MS && deltaMs <= SPEED_WINDOW_MS) {
             speed = deltaTokens / (deltaMs / 1000);
         }
     }
