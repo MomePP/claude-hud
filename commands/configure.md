@@ -342,6 +342,8 @@ Merge with existing config, preserving:
 - `pathLevels` (not in configure flow)
 - `display.usageThreshold` (advanced config)
 - `display.environmentThreshold` (advanced config)
+- `display.contextWarningThreshold` (advanced config)
+- `display.contextCriticalThreshold` (advanced config)
 - `colors` (advanced manual palette overrides)
 
 **Migration note**: Old configs with `layout: "default"` or `layout: "separators"` are automatically migrated to the new `lineLayout` + `showSeparators` format on load.
