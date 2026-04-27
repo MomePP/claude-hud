@@ -36,7 +36,10 @@ export interface StdinData {
             resets_at?: number | null;
         } | null;
     } | null;
-    effort?: string | null;
+    effort?: string | {
+        level?: string | null;
+        [key: string]: unknown;
+    } | null;
 }
 export interface ToolEntry {
     id: string;
@@ -64,6 +67,17 @@ export interface UsageData {
     sevenDay: number | null;
     fiveHourResetAt: Date | null;
     sevenDayResetAt: Date | null;
+}
+export interface ExternalUsageSnapshot {
+    five_hour?: {
+        used_percentage?: number | null;
+        resets_at?: string | number | null;
+    } | null;
+    seven_day?: {
+        used_percentage?: number | null;
+        resets_at?: string | number | null;
+    } | null;
+    updated_at?: string | number | null;
 }
 export interface MemoryInfo {
     totalBytes: number;
@@ -104,6 +118,8 @@ export interface TranscriptData {
     lastRequestTokenUsage?: LastRequestTokenUsage;
     thinkingState?: ThinkingState;
     pendingPermission?: PendingPermission;
+    lastCompactBoundaryAt?: Date;
+    lastCompactPostTokens?: number;
 }
 export interface RenderContext {
     stdin: StdinData;

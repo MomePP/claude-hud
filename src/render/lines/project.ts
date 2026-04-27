@@ -137,7 +137,7 @@ function safeHyperlink(uri: string | undefined | null, text: string): string {
   }
 }
 
-export function renderProjectLine(ctx: RenderContext): string | null {
+function renderPipesProjectLine(ctx: RenderContext): string | null {
   const display = ctx.config?.display;
   const colors = ctx.config?.colors;
   const parts: string[] = [];

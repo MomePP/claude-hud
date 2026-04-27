@@ -17,9 +17,13 @@ export declare function thinking(text: string, colors?: Partial<HudColorOverride
 export declare function duration(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function warning(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function critical(text: string, colors?: Partial<HudColorOverrides>): string;
-export declare function getContextColor(percent: number, colors?: Partial<HudColorOverrides>): string;
+export interface ContextThresholds {
+    warning?: number;
+    critical?: number;
+}
+export declare function getContextColor(percent: number, colors?: Partial<HudColorOverrides>, thresholds?: ContextThresholds): string;
 export declare function getQuotaColor(percent: number, colors?: Partial<HudColorOverrides>): string;
 export type BarStyleName = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export declare function quotaBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string;
-export declare function coloredBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string;
+export declare function coloredBar(percent: number, width?: number, colors?: Partial<HudColorOverrides>, style?: BarStyleName, thresholds?: ContextThresholds): string;
 //# sourceMappingURL=colors.d.ts.map

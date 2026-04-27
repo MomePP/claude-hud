@@ -98,10 +98,12 @@ export function warning(text, colors) {
 export function critical(text, colors) {
     return colorize(text, resolveAnsi(colors?.critical, RED));
 }
-export function getContextColor(percent, colors) {
-    if (percent >= 85)
+export function getContextColor(percent, colors, thresholds) {
+    const critical = thresholds?.critical ?? 85;
+    const warning = thresholds?.warning ?? 70;
+    if (percent >= critical)
         return resolveAnsi(colors?.critical, RED);
-    if (percent >= 70)
+    if (percent >= warning)
         return resolveAnsi(colors?.warning, YELLOW);
     return resolveAnsi(colors?.context, GREEN);
 }
@@ -133,12 +135,12 @@ export function quotaBar(percent, width = 10, colors, style) {
     const chars = barChars(style);
     return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }
-export function coloredBar(percent, width = 10, colors, style) {
+export function coloredBar(percent, width = 10, colors, style, thresholds) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
     const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
     const filled = Math.round((safePercent / 100) * safeWidth);
     const empty = safeWidth - filled;
-    const color = getContextColor(safePercent, colors);
+    const color = getContextColor(safePercent, colors, thresholds);
     const chars = barChars(style);
     return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }

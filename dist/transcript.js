@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
-const TRANSCRIPT_CACHE_VERSION = 2;
+const TRANSCRIPT_CACHE_VERSION = 3;
 // 4MB tail window: enough to catch the most recent ~80–130 agent calls and
 // tool results while bounding I/O. Ported from omc-hud. Files smaller than
 // this threshold are still fully streamed.
@@ -52,6 +52,14 @@ function normalizeSessionTokens(tokens) {
 function getTranscriptCachePath(transcriptPath, homeDir) {
     const hash = createHash('sha256').update(path.resolve(transcriptPath)).digest('hex');
     return path.join(getHudPluginDir(homeDir), 'transcript-cache', `${hash}.json`);
+}
+function canonicalizeTranscriptPath(transcriptPath) {
+    try {
+        return fs.realpathSync(transcriptPath);
+    }
+    catch {
+        return null;
+    }
 }
 function readTranscriptFileState(transcriptPath) {
     try {
@@ -116,6 +124,8 @@ function serializeTranscriptData(data) {
                 timestamp: data.pendingPermission.timestamp.toISOString(),
             }
             : undefined,
+        lastCompactBoundaryAt: data.lastCompactBoundaryAt?.toISOString(),
+        lastCompactPostTokens: data.lastCompactPostTokens,
     };
 }
 function deserializeTranscriptData(data) {
@@ -145,6 +155,8 @@ function deserializeTranscriptData(data) {
                 timestamp: new Date(data.pendingPermission.timestamp),
             }
             : undefined,
+        lastCompactBoundaryAt: data.lastCompactBoundaryAt ? new Date(data.lastCompactBoundaryAt) : undefined,
+        lastCompactPostTokens: typeof data.lastCompactPostTokens === 'number' ? data.lastCompactPostTokens : undefined,
     };
 }
 function readTranscriptCache(transcriptPath, state) {
@@ -176,7 +188,7 @@ function writeTranscriptCache(transcriptPath, state, data) {
             transcriptState: state,
             data: serializeTranscriptData(data),
         };
-        fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
+        fs.writeFileSync(cachePath, JSON.stringify(payload), { encoding: 'utf8', mode: 0o600 });
     }
     catch {
         // Cache failures are non-fatal; fall back to fresh parsing next time.
@@ -216,11 +228,15 @@ export async function parseTranscript(transcriptPath) {
     if (!transcriptPath || !fs.existsSync(transcriptPath)) {
         return result;
     }
-    const transcriptState = readTranscriptFileState(transcriptPath);
+    const canonicalTranscriptPath = canonicalizeTranscriptPath(transcriptPath);
+    if (!canonicalTranscriptPath) {
+        return result;
+    }
+    const transcriptState = readTranscriptFileState(canonicalTranscriptPath);
     if (!transcriptState) {
         return result;
     }
-    const cached = readTranscriptCache(transcriptPath, transcriptState);
+    const cached = readTranscriptCache(canonicalTranscriptPath, transcriptState);
     if (cached) {
         return finalizeTranscriptResult(cached);
     }
@@ -237,6 +253,8 @@ export async function parseTranscript(transcriptPath) {
     const taskIdToIndex = new Map();
     let latestSlug;
     let customTitle;
+    let lastCompactBoundaryAt;
+    let lastCompactPostTokens;
     const sessionTokens = {
         inputTokens: 0,
         outputTokens: 0,
@@ -288,6 +306,22 @@ export async function parseTranscript(transcriptPath) {
                     }
                 }
             }
+            // Track Claude Code's compact_boundary marker. Both manual (/compact)
+            // and auto compaction emit this system entry with compactMetadata; we
+            // take the most recent one's timestamp so callers can distinguish a
+            // legitimate post-compact zero frame from a transient stdin glitch.
+            if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
+                const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+                if (ts && !Number.isNaN(ts.getTime())) {
+                    if (!lastCompactBoundaryAt || ts.getTime() > lastCompactBoundaryAt.getTime()) {
+                        lastCompactBoundaryAt = ts;
+                        const post = entry.compactMetadata?.postTokens;
+                        lastCompactPostTokens = typeof post === 'number' && Number.isFinite(post) && post >= 0
+                            ? Math.trunc(post)
+                            : undefined;
+                    }
+                }
+            }
             processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap, pendingPermissionMap);
         }
         catch {
@@ -301,7 +335,7 @@ export async function parseTranscript(transcriptPath) {
             }
         }
         else {
-            const fileStream = createReadStreamImpl(transcriptPath);
+            const fileStream = createReadStreamImpl(canonicalTranscriptPath);
             const rl = readline.createInterface({
                 input: fileStream,
                 crlfDelay: Infinity,
@@ -355,10 +389,10 @@ export async function parseTranscript(transcriptPath) {
     if (youngest) {
         result.pendingPermission = youngest;
     }
-    // Write raw result (with lastSeen / timestamp intact) before finalization so
-    // the cache stores the data needed for decay recomputation on every cache hit.
+    result.lastCompactBoundaryAt = lastCompactBoundaryAt;
+    result.lastCompactPostTokens = lastCompactPostTokens;
     if (parsedCleanly) {
-        writeTranscriptCache(transcriptPath, transcriptState, result);
+        writeTranscriptCache(canonicalTranscriptPath, transcriptState, result);
     }
     return finalizeTranscriptResult(result);
 }
@@ -449,27 +483,37 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
             else if (canonicalName === 'TodoWrite') {
                 const input = block.input;
                 if (input?.todos && Array.isArray(input.todos)) {
-                    // Build reverse map: content → taskIds from existing state
+                    // Build a FIFO queue of taskIds per content string, ordered by the
+                    // old array position. Two todos that share the same content must
+                    // each get their own taskId back after the rebuild, so we cannot
+                    // collapse duplicates to one index.
                     const contentToTaskIds = new Map();
+                    const taskIdsByOldIndex = [];
                     for (const [taskId, idx] of taskIdToIndex) {
                         if (idx < latestTodos.length) {
-                            const content = latestTodos[idx].content;
-                            const ids = contentToTaskIds.get(content) ?? [];
-                            ids.push(taskId);
-                            contentToTaskIds.set(content, ids);
+                            taskIdsByOldIndex.push([idx, taskId]);
                         }
+                    }
+                    taskIdsByOldIndex.sort((a, b) => a[0] - b[0]);
+                    for (const [idx, taskId] of taskIdsByOldIndex) {
+                        const content = latestTodos[idx].content;
+                        const ids = contentToTaskIds.get(content) ?? [];
+                        ids.push(taskId);
+                        contentToTaskIds.set(content, ids);
                     }
                     latestTodos.length = 0;
                     taskIdToIndex.clear();
                     latestTodos.push(...input.todos);
-                    // Re-register taskId mappings for items whose content matches
+                    // Consume one queued taskId per new todo that matches by content,
+                    // so duplicate-content items still each get their own taskId.
                     for (let i = 0; i < latestTodos.length; i++) {
                         const ids = contentToTaskIds.get(latestTodos[i].content);
-                        if (ids) {
-                            for (const taskId of ids) {
-                                taskIdToIndex.set(taskId, i);
+                        if (ids && ids.length > 0) {
+                            const taskId = ids.shift();
+                            taskIdToIndex.set(taskId, i);
+                            if (ids.length === 0) {
+                                contentToTaskIds.delete(latestTodos[i].content);
                             }
-                            contentToTaskIds.delete(latestTodos[i].content);
                         }
                     }
                 }
@@ -638,6 +682,10 @@ function extractTarget(toolName, input) {
             return input.pattern;
         case 'Grep':
             return input.pattern;
+        case 'Skill':
+            return typeof input.skill === 'string' && input.skill.trim().length > 0
+                ? input.skill
+                : undefined;
         case 'Bash':
             const cmd = input.command;
             return cmd?.slice(0, 30) + (cmd?.length > 30 ? '...' : '');

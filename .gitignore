@@ -57,3 +57,4 @@ temp/
 yarn.lock
 bun.lock
 .omc/
+.weave/

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { getModelName, formatModelName, getProviderLabel } from '../../stdin.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
 import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor } from '../colors.js';
@@ -21,6 +22,7 @@ function formatLastRequestTokens(usage) {
     }
     return base;
 }
+const CONTROL_AND_BIDI_PATTERN = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u206A-\u206F]/g;
 function hyperlink(uri, text) {
     const esc = '\x1b';
     const st = '\\';
@@ -79,6 +81,42 @@ function buildExtras(ctx) {
     }
     return extras;
 }
+function sanitizeDisplayText(value) {
+    return value.replace(CONTROL_AND_BIDI_PATTERN, '');
+}
+function getFileHref(filePath) {
+    try {
+        return pathToFileURL(path.resolve(filePath)).toString();
+    }
+    catch {
+        return null;
+    }
+}
+function resolvePathWithinCwd(cwd, candidatePath) {
+    const resolvedCwd = path.resolve(cwd);
+    const resolvedPath = path.resolve(cwd, candidatePath);
+    const relative = path.relative(resolvedCwd, resolvedPath);
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+        return resolvedPath;
+    }
+    return null;
+}
+function safeHyperlink(uri, text) {
+    if (!uri) {
+        return text;
+    }
+    const sanitizedUri = sanitizeDisplayText(uri);
+    try {
+        const parsed = new URL(sanitizedUri);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'file:') {
+            return text;
+        }
+        return hyperlink(parsed.toString(), text);
+    }
+    catch {
+        return text;
+    }
+}
 function renderPipesProjectLine(ctx) {
     const display = ctx.config?.display;
     const colors = ctx.config?.colors;
@@ -91,18 +129,18 @@ function renderPipesProjectLine(ctx) {
     }
     let projectPart = null;
     if (display?.showProject !== false && ctx.stdin.cwd) {
-        const projectPath = getProjectPath(ctx.stdin.cwd, ctx.config?.pathLevels ?? 1);
+        const projectPath = sanitizeDisplayText(getProjectPath(ctx.stdin.cwd, ctx.config?.pathLevels ?? 1) ?? '');
         if (projectPath) {
-            projectPart = hyperlink(`file://${ctx.stdin.cwd}`, projectColor(projectPath, colors));
+            projectPart = safeHyperlink(getFileHref(ctx.stdin.cwd), projectColor(projectPath, colors));
         }
     }
     let gitPart = '';
     const gitConfig = ctx.config?.gitStatus;
     const showGit = gitConfig?.enabled ?? true;
     if (showGit && ctx.gitStatus) {
-        const branchText = ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : '');
+        const branchText = sanitizeDisplayText(ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : ''));
         const coloredBranch = gitBranchColor(branchText, colors);
-        const linkedBranch = ctx.gitStatus.branchUrl ? hyperlink(ctx.gitStatus.branchUrl, coloredBranch) : coloredBranch;
+        const linkedBranch = safeHyperlink(ctx.gitStatus.branchUrl, coloredBranch);
         const gitInner = [linkedBranch];
         if (gitConfig?.showAheadBehind) {
             if (ctx.gitStatus.ahead > 0)
@@ -152,9 +190,9 @@ function renderNaturalProjectLine(ctx) {
         coreSegments.push(modelColor(modelPart, colors));
     }
     if (display?.showProject !== false && ctx.stdin.cwd) {
-        const projectPath = getProjectPath(ctx.stdin.cwd, ctx.config?.pathLevels ?? 1);
+        const projectPath = sanitizeDisplayText(getProjectPath(ctx.stdin.cwd, ctx.config?.pathLevels ?? 1) ?? '');
         if (projectPath) {
-            const linked = hyperlink(`file://${ctx.stdin.cwd}`, projectColor(projectPath, colors));
+            const linked = safeHyperlink(getFileHref(ctx.stdin.cwd), projectColor(projectPath, colors));
             const projectGlyph = display?.projectGlyph ?? '';
             const projectGlyphPart = projectGlyph ? `${projectColor(projectGlyph, colors)} ` : '';
             coreSegments.push(`${dim('in')} ${projectGlyphPart}${linked}`);
@@ -165,7 +203,7 @@ function renderNaturalProjectLine(ctx) {
     if (showGit && ctx.gitStatus) {
         const branchText = ctx.gitStatus.branch + ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
-        const linkedBranch = ctx.gitStatus.branchUrl ? hyperlink(ctx.gitStatus.branchUrl, coloredBranch) : coloredBranch;
+        const linkedBranch = safeHyperlink(ctx.gitStatus.branchUrl, coloredBranch);
         const branchGlyph = display?.branchGlyph ?? '';
         const branchGlyphPart = branchGlyph ? `${gitBranchColor(branchGlyph, colors)} ` : '';
         const gitTokens = [`${dim('on')} ${branchGlyphPart}${linkedBranch}`];
@@ -231,8 +269,10 @@ export function renderGitFilesLine(ctx, terminalWidth = null) {
     const cwd = ctx.stdin.cwd;
     const sorted = [...trackedFiles].sort((a, b) => {
         try {
-            const aMtime = cwd ? fs.statSync(path.join(cwd, a.fullPath)).mtimeMs : 0;
-            const bMtime = cwd ? fs.statSync(path.join(cwd, b.fullPath)).mtimeMs : 0;
+            const aPath = cwd ? resolvePathWithinCwd(cwd, a.fullPath) : null;
+            const bPath = cwd ? resolvePathWithinCwd(cwd, b.fullPath) : null;
+            const aMtime = aPath ? fs.statSync(aPath).mtimeMs : 0;
+            const bMtime = bPath ? fs.statSync(bPath).mtimeMs : 0;
             return bMtime - aMtime;
         }
         catch {
@@ -244,12 +284,14 @@ export function renderGitFilesLine(ctx, terminalWidth = null) {
     const statParts = [];
     for (const trackedFile of shown) {
         const prefix = trackedFile.type === 'added' ? green('+') : trackedFile.type === 'deleted' ? red('-') : yellow('~');
+        const safeBasename = sanitizeDisplayText(trackedFile.basename);
         const coloredName = trackedFile.type === 'added'
-            ? green(trackedFile.basename)
+            ? green(safeBasename)
             : trackedFile.type === 'deleted'
-                ? red(trackedFile.basename)
-                : yellow(trackedFile.basename);
-        const linkedName = cwd ? hyperlink(`file://${path.join(cwd, trackedFile.fullPath)}`, coloredName) : coloredName;
+                ? red(safeBasename)
+                : yellow(safeBasename);
+        const resolvedPath = cwd ? resolvePathWithinCwd(cwd, trackedFile.fullPath) : null;
+        const linkedName = resolvedPath ? safeHyperlink(getFileHref(resolvedPath), coloredName) : coloredName;
         let entry = `${prefix}${linkedName}`;
         if (trackedFile.lineDiff) {
             const diffParts = [];

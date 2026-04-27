@@ -4,6 +4,40 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-27 — MomePP fork (upstream sync)
+
+Pulls upstream `jarrodwatts/claude-hud` past `v0.1.0` into the fork.
+All fork features verified intact post-merge: 554/554 tests pass,
+every fork field still read in render, mergeConfig covers all 13
+fork fields, OMC transcript layer + MCP compression + indicators
+all preserved.
+
+### Added — from upstream
+- Show Skill tool targets in tool activity (#497).
+- Configurable context color thresholds (#488).
+- Vertex AI provider detection — disables cost estimation for Vertex
+  the same way Bedrock is handled.
+- External usage snapshot fallback (#478) — polls an external usage
+  file when Claude Code's stdin `rate_limits` is missing.
+
+### Fixed — from upstream
+- Speed tracker now scopes its cache per session (no cross-session
+  contamination, #496).
+- Context handles post-compact resets cleanly.
+- Effort field tolerates object schema from Claude Code 2.1.115+.
+- Render handles real 40-col terminals and OSC 8 branch links.
+- TodoWrite preserves taskIds across duplicate-content rewrites.
+- Cost: added Claude Haiku 4.x pricing.
+- Git numstat keeps diffs on quoted arrow filenames.
+
+### Preserved — fork features (no regressions)
+All 0.1.7 / 0.2.x fork additions audited and confirmed working:
+OMC transcript compat (`proxy_`, task-notification, tail-read),
+inline indicators (thinking/permission/last-tokens with interrupt
++ wall-clock cap), MCP tool-name compression, natural project
+style + glyphs + 7 bar styles + `colors.thinking`/`colors.duration`,
+`gitStatus.showFileList` split, fork launcher + macOS/Linux setup.
+
 ## [0.2.2] - 2026-04-20 — MomePP fork
 
 Follow-up audit after the 0.2.0 rebase caught three more fork fields

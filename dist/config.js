@@ -64,9 +64,13 @@ export const DEFAULT_CONFIG = {
         showLastRequestTokens: false,
         mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
         autocompactBuffer: 'enabled',
+        contextWarningThreshold: 70,
+        contextCriticalThreshold: 85,
         usageThreshold: 0,
         sevenDayThreshold: 80,
         environmentThreshold: 0,
+        externalUsagePath: '',
+        externalUsageFreshnessMs: 300000,
         modelFormat: 'full',
         modelOverride: '',
         customLine: '',
@@ -242,9 +246,29 @@ function validateThreshold(value, max = 100) {
         return 0;
     return Math.max(0, Math.min(max, value));
 }
+function validateContextThreshold(value, fallback) {
+    if (typeof value !== 'number' || !Number.isFinite(value))
+        return fallback;
+    return Math.max(0, Math.min(100, value));
+}
 function validateCountThreshold(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return 0;
+    }
+    return Math.max(0, Math.floor(value));
+}
+function validateDurationSeconds(value, fallback) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        return fallback;
+    }
+    return Math.floor(value);
+}
+function validateOptionalPath(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+function validateFreshnessMs(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return DEFAULT_CONFIG.display.externalUsageFreshnessMs;
     }
     return Math.max(0, Math.floor(value));
 }
@@ -370,9 +394,13 @@ export function mergeConfig(userConfig) {
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer
             : DEFAULT_CONFIG.display.autocompactBuffer,
+        contextWarningThreshold: validateContextThreshold(migrated.display?.contextWarningThreshold, DEFAULT_CONFIG.display.contextWarningThreshold),
+        contextCriticalThreshold: validateContextThreshold(migrated.display?.contextCriticalThreshold, DEFAULT_CONFIG.display.contextCriticalThreshold),
         usageThreshold: validateThreshold(migrated.display?.usageThreshold, 100),
         sevenDayThreshold: validateThreshold(migrated.display?.sevenDayThreshold, 100),
         environmentThreshold: validateThreshold(migrated.display?.environmentThreshold, 100),
+        externalUsagePath: validateOptionalPath(migrated.display?.externalUsagePath),
+        externalUsageFreshnessMs: validateFreshnessMs(migrated.display?.externalUsageFreshnessMs),
         modelFormat: validateModelFormat(migrated.display?.modelFormat)
             ? migrated.display.modelFormat
             : DEFAULT_CONFIG.display.modelFormat,
