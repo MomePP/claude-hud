@@ -9,6 +9,7 @@ export const zh = {
     "label.hooks": "钩子",
     "label.estimatedCost": "估算",
     "label.cost": "费用",
+    "label.tokens": "令牌",
     // Status
     "status.limitReached": "已达上限",
     "status.allTodosComplete": "全部完成",
@@ -20,6 +21,7 @@ export const zh = {
     "format.in": "输入",
     "format.cache": "缓存",
     "format.out": "输出",
+    "format.tok": "令牌",
     "format.tokPerSec": "tok/s",
     // Init
     "init.initializing": "[claude-hud] 正在初始化...",

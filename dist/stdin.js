@@ -188,6 +188,13 @@ export function isBedrockModelId(modelId) {
     const normalized = modelId.toLowerCase();
     return normalized.includes('anthropic.claude-');
 }
+// Vertex AI model IDs use '@' as version separator (e.g. claude-3-5-sonnet@20241022)
+export function isVertexModelId(modelId) {
+    if (!modelId) {
+        return false;
+    }
+    return modelId.includes('@');
+}
 const ENTERPRISE_MODEL_IDS = new Set(['opusplan', 'sonnetplan', 'haikuplan']);
 export function isEnterpriseModelId(modelId) {
     if (!modelId) {
@@ -199,10 +206,16 @@ export function getProviderLabel(stdin) {
     if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
         return 'Bedrock';
     }
+    if (process.env.CLAUDE_CODE_USE_VERTEX === '1') {
+        return 'Vertex';
+    }
     if (isEnterpriseModelId(stdin.model?.id)) {
         return 'Enterprise';
     }
     return null;
+}
+export function shouldHideUsage(stdin) {
+    return getProviderLabel(stdin) === 'Bedrock' || isBedrockModelId(stdin.model?.id);
 }
 function parseRateLimitPercent(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {

@@ -1,12 +1,16 @@
-import { isBedrockModelId } from './stdin.js';
+import { isBedrockModelId, isVertexModelId } from './stdin.js';
 const TOKENS_PER_MILLION = 1_000_000;
 const CACHE_WRITE_MULTIPLIER = 1.25;
 const CACHE_READ_MULTIPLIER = 0.1;
+// Patterns are tried in order; the first match wins. Families with more specific
+// model lines (Haiku 4.x differs from Haiku 3.5) must come before any broader
+// fallback patterns to avoid silent under-pricing.
 const ANTHROPIC_MODEL_PRICING = [
     { pattern: /\bopus 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
     { pattern: /\bsonnet 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
     { pattern: /\bsonnet 3 7\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
     { pattern: /\bsonnet 3 5\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
+    { pattern: /\bhaiku 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 1, outputUsdPerMillion: 5 } },
     { pattern: /\bhaiku 3 5\b/i, pricing: { inputUsdPerMillion: 0.8, outputUsdPerMillion: 4 } },
     // Enterprise plan aliases (e.g. opusplan, sonnetplan, haikuplan)
     { pattern: /\bopusplan\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
@@ -57,6 +61,9 @@ export function estimateSessionCost(stdin, sessionTokens) {
     if (isBedrockModelId(stdin.model?.id)) {
         return null;
     }
+    if (isVertexModelId(stdin.model?.id)) {
+        return null;
+    }
     const pricing = getAnthropicPricing(stdin);
     if (!pricing) {
         return null;
@@ -86,6 +93,9 @@ function getNativeCostUsd(stdin) {
         return null;
     }
     if (isBedrockModelId(stdin.model?.id)) {
+        return null;
+    }
+    if (isVertexModelId(stdin.model?.id)) {
         return null;
     }
     return nativeCost;

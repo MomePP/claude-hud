@@ -9,6 +9,7 @@ export const en = {
     "label.hooks": "hooks",
     "label.estimatedCost": "Est.",
     "label.cost": "Cost",
+    "label.tokens": "Tokens",
     // Status
     "status.limitReached": "Limit reached",
     "status.allTodosComplete": "All todos complete",
@@ -20,6 +21,7 @@ export const en = {
     "format.in": "in",
     "format.cache": "cache",
     "format.out": "out",
+    "format.tok": "tok",
     "format.tokPerSec": "tok/s",
     // Init
     "init.initializing": "[claude-hud] Initializing...",

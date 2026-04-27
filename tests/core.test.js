@@ -467,6 +467,31 @@ test('estimateSessionCost still calculates transcript-based Anthropic pricing', 
   assert.equal(formatUsd(estimate.totalUsd), '$1.09');
 });
 
+test('estimateSessionCost prices Claude Haiku 4.5 (and future 4.x minors)', () => {
+  const tokens = {
+    inputTokens: 1_000_000,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    outputTokens: 100_000,
+  };
+
+  const haiku45 = estimateSessionCost({ model: { display_name: 'Claude Haiku 4.5' } }, tokens);
+  assert.ok(haiku45, 'expected non-null estimate for Claude Haiku 4.5');
+  // 1M input @ $1 + 100k output @ $5 = $1 + $0.5 = $1.50
+  assert.equal(formatUsd(haiku45.totalUsd), '$1.50');
+
+  // Bare "Haiku 4" (short name) should also match.
+  const haiku4Bare = estimateSessionCost({ model: { display_name: 'Claude Haiku 4' } }, tokens);
+  assert.ok(haiku4Bare, 'expected non-null estimate for bare Claude Haiku 4');
+  assert.equal(formatUsd(haiku4Bare.totalUsd), '$1.50');
+
+  // Haiku 3.5 pricing stays on its own row.
+  const haiku35 = estimateSessionCost({ model: { display_name: 'Claude Haiku 3.5' } }, tokens);
+  assert.ok(haiku35, 'expected non-null estimate for Claude Haiku 3.5');
+  // 1M input @ $0.8 + 100k output @ $4 = $0.8 + $0.4 = $1.20
+  assert.equal(formatUsd(haiku35.totalUsd), '$1.20');
+});
+
 
 test('parseTranscript aggregates tools, agents, and todos', async () => {
   const fixturePath = fileURLToPath(new URL('./fixtures/transcript-basic.jsonl', import.meta.url));
@@ -523,6 +548,67 @@ test('parseTranscript accumulates session token usage from assistant messages', 
       cacheCreationTokens: 9000,
       cacheReadTokens: 2000,
     });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript records the most recent compact_boundary and postTokens', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'compact-boundary.jsonl');
+  const lines = [
+    JSON.stringify({ type: 'assistant', timestamp: '2024-01-01T00:00:01.000Z' }),
+    JSON.stringify({
+      type: 'system',
+      subtype: 'compact_boundary',
+      timestamp: '2024-01-01T00:05:00.000Z',
+      compactMetadata: { trigger: 'auto', preTokens: 170574, postTokens: 7679 },
+    }),
+    JSON.stringify({ type: 'assistant', timestamp: '2024-01-01T00:06:00.000Z' }),
+    // A second /compact later in the session should win.
+    JSON.stringify({
+      type: 'system',
+      subtype: 'compact_boundary',
+      timestamp: '2024-01-01T00:10:00.000Z',
+      compactMetadata: { trigger: 'manual', preTokens: 180000, postTokens: 12345 },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.lastCompactBoundaryAt?.toISOString(), '2024-01-01T00:10:00.000Z');
+    assert.equal(result.lastCompactPostTokens, 12345);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript ignores compact_boundary entries without a valid timestamp', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'compact-boundary-bad.jsonl');
+  const lines = [
+    JSON.stringify({
+      type: 'system',
+      subtype: 'compact_boundary',
+      timestamp: 'not-a-date',
+      compactMetadata: { postTokens: 500 },
+    }),
+    JSON.stringify({
+      type: 'system',
+      subtype: 'something_else',
+      timestamp: '2024-01-01T00:05:00.000Z',
+      compactMetadata: { postTokens: 999 },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.lastCompactBoundaryAt, undefined);
+    assert.equal(result.lastCompactPostTokens, undefined);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -621,6 +707,48 @@ test('TaskCreate taskId is preserved across TodoWrite and usable by TaskUpdate',
     assert.equal(result.todos[0].status, 'completed', 'TaskUpdate via preserved taskId should mark todo completed');
     assert.equal(result.todos[1].content, 'Write tests');
     assert.equal(result.todos[1].status, 'pending');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('TaskCreate taskIds survive TodoWrite when two todos share the same content', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'taskid-duplicate.jsonl');
+  const lines = [
+    JSON.stringify({
+      timestamp: '2024-01-01T00:00:00.000Z',
+      message: { content: [{ type: 'tool_use', id: 'tc-1', name: 'TaskCreate', input: { taskId: 'a1', subject: 'Duplicate task' } }] },
+    }),
+    JSON.stringify({
+      timestamp: '2024-01-01T00:00:01.000Z',
+      message: { content: [{ type: 'tool_use', id: 'tc-2', name: 'TaskCreate', input: { taskId: 'a2', subject: 'Duplicate task' } }] },
+    }),
+    JSON.stringify({
+      timestamp: '2024-01-01T00:00:02.000Z',
+      message: { content: [{ type: 'tool_use', id: 'tw-1', name: 'TodoWrite', input: { todos: [
+        { content: 'Duplicate task', status: 'pending' },
+        { content: 'Duplicate task', status: 'pending' },
+      ] } }] },
+    }),
+    // Update the SECOND duplicate's taskId specifically.
+    JSON.stringify({
+      timestamp: '2024-01-01T00:00:03.000Z',
+      message: { content: [{ type: 'tool_use', id: 'tu-1', name: 'TaskUpdate', input: { taskId: 'a2', status: 'completed' } }] },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.todos.length, 2);
+    assert.equal(result.todos[0].content, 'Duplicate task');
+    assert.equal(result.todos[0].status, 'pending',
+      'first occurrence must remain pending when only the second was updated');
+    assert.equal(result.todos[1].content, 'Duplicate task');
+    assert.equal(result.todos[1].status, 'completed',
+      'second occurrence must be reachable by its own taskId after TodoWrite');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -748,6 +876,57 @@ test('parseTranscript extracts tool targets for common tools', async () => {
     assert.equal(targets.get('Bash'), 'echo hello world');
     assert.equal(targets.get('Glob'), '**/*.ts');
     assert.equal(targets.get('Grep'), 'render');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript extracts Skill tool target from non-empty input.skill', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'skill-target.jsonl');
+  const lines = [
+    JSON.stringify({
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool-1', name: 'Skill', input: { skill: 'prd-development' } },
+        ],
+      },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.tools.length, 1);
+    assert.equal(result.tools[0].name, 'Skill');
+    assert.equal(result.tools[0].target, 'prd-development');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseTranscript leaves Skill target empty when input.skill is missing or invalid', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-'));
+  const filePath = path.join(dir, 'skill-target-invalid.jsonl');
+  const lines = [
+    JSON.stringify({
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool-1', name: 'Skill', input: {} },
+          { type: 'tool_use', id: 'tool-2', name: 'Skill', input: { skill: 123 } },
+          { type: 'tool_use', id: 'tool-3', name: 'Skill', input: { skill: '   ' } },
+        ],
+      },
+    }),
+  ];
+
+  await writeFile(filePath, lines.join('\n'), 'utf8');
+
+  try {
+    const result = await parseTranscript(filePath);
+    assert.equal(result.tools.length, 3);
+    assert.deepEqual(result.tools.map((tool) => tool.target), [undefined, undefined, undefined]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

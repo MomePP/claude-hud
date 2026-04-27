@@ -238,6 +238,14 @@ export function isBedrockModelId(modelId?: string): boolean {
   return normalized.includes('anthropic.claude-');
 }
 
+// Vertex AI model IDs use '@' as version separator (e.g. claude-3-5-sonnet@20241022)
+export function isVertexModelId(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  return modelId.includes('@');
+}
+
 const ENTERPRISE_MODEL_IDS = new Set(['opusplan', 'sonnetplan', 'haikuplan']);
 
 export function isEnterpriseModelId(modelId?: string): boolean {
@@ -251,10 +259,17 @@ export function getProviderLabel(stdin: StdinData): string | null {
   if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
     return 'Bedrock';
   }
+  if (process.env.CLAUDE_CODE_USE_VERTEX === '1') {
+    return 'Vertex';
+  }
   if (isEnterpriseModelId(stdin.model?.id)) {
     return 'Enterprise';
   }
   return null;
+}
+
+export function shouldHideUsage(stdin: StdinData): boolean {
+  return getProviderLabel(stdin) === 'Bedrock' || isBedrockModelId(stdin.model?.id);
 }
 
 function parseRateLimitPercent(value: number | null | undefined): number | null {

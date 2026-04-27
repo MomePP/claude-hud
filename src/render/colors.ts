@@ -124,9 +124,20 @@ export function critical(text: string, colors?: Partial<HudColorOverrides>): str
   return colorize(text, resolveAnsi(colors?.critical, RED));
 }
 
-export function getContextColor(percent: number, colors?: Partial<HudColorOverrides>): string {
-  if (percent >= 85) return resolveAnsi(colors?.critical, RED);
-  if (percent >= 70) return resolveAnsi(colors?.warning, YELLOW);
+export interface ContextThresholds {
+  warning?: number;
+  critical?: number;
+}
+
+export function getContextColor(
+  percent: number,
+  colors?: Partial<HudColorOverrides>,
+  thresholds?: ContextThresholds,
+): string {
+  const critical = thresholds?.critical ?? 85;
+  const warning = thresholds?.warning ?? 70;
+  if (percent >= critical) return resolveAnsi(colors?.critical, RED);
+  if (percent >= warning) return resolveAnsi(colors?.warning, YELLOW);
   return resolveAnsi(colors?.context, GREEN);
 }
 
@@ -162,12 +173,12 @@ export function quotaBar(percent: number, width: number = 10, colors?: Partial<H
   return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }
 
-export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string {
+export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName, thresholds?: ContextThresholds): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
-  const color = getContextColor(safePercent, colors);
+  const color = getContextColor(safePercent, colors, thresholds);
   const chars = barChars(style);
   return `${color}${chars.filled.repeat(filled)}${DIM}${chars.empty.repeat(empty)}${RESET}`;
 }

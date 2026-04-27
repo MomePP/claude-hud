@@ -14,8 +14,10 @@ export declare function getContextPercent(stdin: StdinData): number;
 export declare function getBufferedPercent(stdin: StdinData): number;
 export declare function getModelName(stdin: StdinData): string;
 export declare function isBedrockModelId(modelId?: string): boolean;
+export declare function isVertexModelId(modelId?: string): boolean;
 export declare function isEnterpriseModelId(modelId?: string): boolean;
 export declare function getProviderLabel(stdin: StdinData): string | null;
+export declare function shouldHideUsage(stdin: StdinData): boolean;
 export declare function getUsageFromStdin(stdin: StdinData): UsageData | null;
 /**
  * Strips redundant context-window size suffixes from model display names.

@@ -1,4 +1,5 @@
 import { label } from '../colors.js';
+import { t } from '../../i18n/index.js';
 function formatTokens(n) {
     if (n >= 1000000) {
         return `${(n / 1000000).toFixed(1)}M`;
@@ -23,12 +24,12 @@ export function renderSessionTokensLine(ctx) {
     }
     const colors = ctx.config?.colors;
     const parts = [
-        `in: ${formatTokens(tokens.inputTokens)}`,
-        `out: ${formatTokens(tokens.outputTokens)}`,
+        `${t('format.in')}: ${formatTokens(tokens.inputTokens)}`,
+        `${t('format.out')}: ${formatTokens(tokens.outputTokens)}`,
     ];
     if (tokens.cacheCreationTokens > 0 || tokens.cacheReadTokens > 0) {
-        parts.push(`cache: ${formatTokens(tokens.cacheCreationTokens + tokens.cacheReadTokens)}`);
+        parts.push(`${t('format.cache')}: ${formatTokens(tokens.cacheCreationTokens + tokens.cacheReadTokens)}`);
     }
-    return label(`Tokens ${formatTokens(total)} (${parts.join(', ')})`, colors);
+    return label(`${t('label.tokens')} ${formatTokens(total)} (${parts.join(', ')})`, colors);
 }
 //# sourceMappingURL=session-tokens.js.map

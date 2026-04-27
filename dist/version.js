@@ -9,7 +9,7 @@ const defaultExecFile = promisify(execFile);
 let execFileImpl = defaultExecFile;
 let resolveClaudeBinaryImpl = resolveClaudeBinaryFromPath;
 let platformImpl = () => process.platform;
-let comspecImpl = () => process.env.COMSPEC;
+let windowsCmdImpl = () => 'C:\\Windows\\System32\\cmd.exe';
 let cachedBinaryKey;
 let cachedVersion;
 let hasResolved = false;
@@ -139,12 +139,12 @@ export function _parseClaudeCodeVersion(output) {
     const match = trimmed.match(/\d+(?:\.\d+)+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/);
     return match?.[0];
 }
-export function _getClaudeVersionInvocation(binaryPath, platform = platformImpl(), comspec = comspecImpl()) {
+export function _getClaudeVersionInvocation(binaryPath, platform = platformImpl(), windowsCmd = windowsCmdImpl()) {
     const ext = path.extname(binaryPath).toLowerCase();
     if (platform === 'win32' && (ext === '.cmd' || ext === '.bat')) {
         const command = [quoteForCmd(binaryPath), '--version'].join(' ');
         return {
-            file: comspec || 'cmd.exe',
+            file: windowsCmd,
             args: ['/d', '/s', '/c', `"${command}"`],
         };
     }
@@ -220,8 +220,8 @@ export function _setExecFileImplForTests(impl) {
 export function _setResolveClaudeBinaryForTests(impl) {
     resolveClaudeBinaryImpl = impl ?? resolveClaudeBinaryFromPath;
 }
-export function _setVersionInvocationEnvForTests(platformGetter, comspecGetter) {
+export function _setVersionInvocationEnvForTests(platformGetter, windowsCmdGetter) {
     platformImpl = platformGetter ?? (() => process.platform);
-    comspecImpl = comspecGetter ?? (() => process.env.COMSPEC);
+    windowsCmdImpl = windowsCmdGetter ?? (() => 'C:\\Windows\\System32\\cmd.exe');
 }
 //# sourceMappingURL=version.js.map

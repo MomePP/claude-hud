@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { render } from '../dist/render/index.js';
 import { renderSessionLine } from '../dist/render/session-line.js';
 import { renderProjectLine, renderGitFilesLine } from '../dist/render/lines/project.js';
@@ -105,7 +106,10 @@ async function withDeterministicSpeedCache(fn) {
   const tempConfigDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-render-'));
   const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
   const originalNow = Date.now;
-  const cachePath = path.join(tempConfigDir, 'plugins', 'claude-hud', '.speed-cache.json');
+  const transcriptPath = path.join(tempConfigDir, 'session.jsonl');
+  await writeFile(transcriptPath, '', 'utf8');
+  const transcriptHash = createHash('sha256').update(path.resolve(transcriptPath)).digest('hex');
+  const cachePath = path.join(tempConfigDir, 'plugins', 'claude-hud', 'speed-cache', `${transcriptHash}.json`);
 
   process.env.CLAUDE_CONFIG_DIR = tempConfigDir;
   await mkdir(path.dirname(cachePath), { recursive: true });
@@ -113,7 +117,7 @@ async function withDeterministicSpeedCache(fn) {
   Date.now = () => 2000;
 
   try {
-    await fn();
+    await fn({ transcriptPath });
   } finally {
     Date.now = originalNow;
     if (originalConfigDir === undefined) {
@@ -132,6 +136,42 @@ test('renderSessionLine adds token breakdown when context is high', () => {
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('in:'), 'expected token breakdown');
   assert.ok(line.includes('cache:'), 'expected cache breakdown');
+});
+
+test('renderSessionLine token breakdown honours contextCriticalThreshold', () => {
+  const ctx = baseContext();
+  ctx.config.display.contextCriticalThreshold = 50;
+  // For 55%: (tokens + 33000) / 200000 = 0.55 → tokens = 77000
+  ctx.stdin.context_window.current_usage.input_tokens = 77000;
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('in:'), 'expected token breakdown at 55% when critical threshold is 50');
+});
+
+test('renderSessionLine suppresses token breakdown below raised contextCriticalThreshold', () => {
+  const ctx = baseContext();
+  ctx.config.display.contextCriticalThreshold = 95;
+  // For 90%: (tokens + 33000) / 200000 = 0.9 → tokens = 147000
+  ctx.stdin.context_window.current_usage.input_tokens = 147000;
+  const line = renderSessionLine(ctx);
+  assert.ok(!line.includes('in:'), 'expected no token breakdown at 90% when critical threshold is 95');
+});
+
+test('renderIdentityLine token breakdown honours contextCriticalThreshold', () => {
+  const ctx = baseContext();
+  ctx.config.display.contextCriticalThreshold = 50;
+  // For 55%: (tokens + 33000) / 200000 = 0.55 → tokens = 77000
+  ctx.stdin.context_window.current_usage.input_tokens = 77000;
+  const line = renderIdentityLine(ctx);
+  assert.ok(line.includes('in:'), 'expected token breakdown at 55% when critical threshold is 50');
+});
+
+test('renderIdentityLine suppresses token breakdown below raised contextCriticalThreshold', () => {
+  const ctx = baseContext();
+  ctx.config.display.contextCriticalThreshold = 95;
+  // For 90%: (tokens + 33000) / 200000 = 0.9 → tokens = 147000
+  ctx.stdin.context_window.current_usage.input_tokens = 147000;
+  const line = renderIdentityLine(ctx);
+  assert.ok(!line.includes('in:'), 'expected no token breakdown at 90% when critical threshold is 95');
 });
 
 test('renderSessionLine includes duration and formats large tokens', () => {
@@ -173,6 +213,28 @@ test('renderSessionLine handles missing cache token fields', () => {
 
 test('getContextColor returns yellow for warning threshold', () => {
   assert.equal(getContextColor(70), '\x1b[33m');
+});
+
+test('getContextColor respects custom thresholds', () => {
+  const thresholds = { warning: 30, critical: 50 };
+  assert.equal(getContextColor(10, undefined, thresholds), '\x1b[32m'); // green
+  assert.equal(getContextColor(30, undefined, thresholds), '\x1b[33m'); // yellow
+  assert.equal(getContextColor(49, undefined, thresholds), '\x1b[33m'); // still yellow
+  assert.equal(getContextColor(50, undefined, thresholds), '\x1b[31m'); // red
+  assert.equal(getContextColor(90, undefined, thresholds), '\x1b[31m'); // red
+});
+
+test('getContextColor falls back to defaults when thresholds undefined', () => {
+  assert.equal(getContextColor(69, undefined, {}), '\x1b[32m');
+  assert.equal(getContextColor(70, undefined, {}), '\x1b[33m');
+  assert.equal(getContextColor(85, undefined, {}), '\x1b[31m');
+});
+
+test('getContextColor honours partial threshold overrides', () => {
+  // Only warning overridden — critical stays at default 85
+  assert.equal(getContextColor(30, undefined, { warning: 30 }), '\x1b[33m');
+  assert.equal(getContextColor(84, undefined, { warning: 30 }), '\x1b[33m');
+  assert.equal(getContextColor(85, undefined, { warning: 30 }), '\x1b[31m');
 });
 
 test('getContextColor and getQuotaColor respect custom semantic overrides', () => {
@@ -694,8 +756,9 @@ test('renderProjectLine omits duration when showDuration is false', () => {
 });
 
 test('renderProjectLine includes speed when showSpeed is true and speed is available', async () => {
-  await withDeterministicSpeedCache(async () => {
+  await withDeterministicSpeedCache(async ({ transcriptPath }) => {
     const ctx = baseContext();
+    ctx.stdin.transcript_path = transcriptPath;
     ctx.stdin.cwd = '/tmp/my-project';
     ctx.stdin.context_window.current_usage.output_tokens = 2000;
     ctx.config.display.showSpeed = true;
@@ -715,8 +778,9 @@ test('renderProjectLine omits speed when showSpeed is false', () => {
 });
 
 test('render expanded layout includes speed and duration on the project line', async () => {
-  await withDeterministicSpeedCache(async () => {
+  await withDeterministicSpeedCache(async ({ transcriptPath }) => {
     const ctx = baseContext();
+    ctx.stdin.transcript_path = transcriptPath;
     ctx.config.lineLayout = 'expanded';
     ctx.stdin.cwd = '/tmp/my-project';
     ctx.stdin.context_window.current_usage.output_tokens = 2000;
@@ -1157,6 +1221,40 @@ test('renderSessionLine shows Bedrock label and hides usage for bedrock model id
   } finally {
     delete process.env.CLAUDE_CODE_USE_BEDROCK;
   }
+});
+
+test('renderSessionLine keeps usage visible for Enterprise model aliases', () => {
+  const ctx = baseContext();
+  ctx.stdin.model = { display_name: 'Claude Opus', id: 'opusplan' };
+  ctx.usageData = {
+    planName: 'Team',
+    fiveHour: 23,
+    sevenDay: 45,
+    fiveHourResetAt: null,
+    sevenDayResetAt: null,
+  };
+
+  const line = stripAnsi(renderSessionLine(ctx));
+  assert.ok(line.includes('Enterprise'), 'should include Enterprise label');
+  assert.ok(line.includes('Usage'), 'should keep usage visible for Enterprise aliases');
+  assert.ok(line.includes('5h'), 'should include usage window');
+});
+
+test('renderUsageLine keeps usage visible for Enterprise model aliases in expanded mode', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
+  ctx.stdin.model = { display_name: 'Claude Opus', id: 'opusplan' };
+  ctx.usageData = {
+    planName: 'Team',
+    fiveHour: 23,
+    sevenDay: 45,
+    fiveHourResetAt: null,
+    sevenDayResetAt: null,
+  };
+
+  const line = stripAnsi(renderUsageLine(ctx) ?? '');
+  assert.ok(line.includes('Usage'), 'expanded usage line should still render');
+  assert.ok(line.includes('5h'), 'expanded usage line should include usage window');
 });
 
 test('renderSessionLine displays usage percentages (7d hidden when low)', () => {
@@ -1706,6 +1804,25 @@ test('renderProjectLine colors ahead count at critical threshold', () => {
   assert.ok(line?.includes('\x1b[31m↑25\x1b[0m'), 'ahead count should use critical color');
 });
 
+test('renderProjectLine strips control characters from project and branch links', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-\u0007project';
+  ctx.gitStatus = {
+    branch: 'feat/\u0007name',
+    isDirty: false,
+    ahead: 0,
+    behind: 0,
+    branchUrl: 'https://github.com/example/claude-hud/tree/feat%2Fname\u0007',
+  };
+
+  const line = renderProjectLine(ctx) ?? '';
+  const visible = stripAnsi(line);
+
+  assert.ok(visible.includes('my-project'));
+  assert.ok(visible.includes('feat/name'));
+  assert.ok(!line.includes('\u0007'));
+});
+
 test('renderGitFilesLine renders tracked files with per-file line diffs', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = '/tmp/my-project';
@@ -1734,6 +1851,34 @@ test('renderGitFilesLine renders tracked files with per-file line diffs', () => 
   assert.ok(line?.includes('+4'));
   assert.ok(line?.includes('-2'));
   assert.ok(line?.includes('?2'));
+});
+
+test('renderGitFilesLine strips control characters and skips links outside cwd', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.gitStatus.showFileStats = true;
+  ctx.gitStatus = {
+    branch: 'main',
+    isDirty: true,
+    ahead: 0,
+    behind: 0,
+    lineDiff: { added: 1, deleted: 0 },
+    fileStats: {
+      modified: 1,
+      added: 0,
+      deleted: 0,
+      untracked: 0,
+      trackedFiles: [
+        { basename: 'app\u0007.ts', fullPath: '../outside.ts', type: 'modified', lineDiff: { added: 1, deleted: 0 } },
+      ],
+    },
+  };
+
+  const line = renderGitFilesLine(ctx, 120) ?? '';
+  const visible = stripAnsi(line);
+
+  assert.ok(visible.includes('app.ts'));
+  assert.ok(!line.includes('\u0007'));
 });
 
 test('renderGitFilesLine hides on narrow terminals', () => {
@@ -2025,6 +2170,28 @@ test('renderSessionLine includes compact session token summary when enabled', ()
 
   const line = stripAnsi(renderSessionLine(ctx));
   assert.ok(line.includes('tok: 2k (in: 2k, out: 250)'), 'should include compact token summary');
+});
+
+test('renderSessionLine translates compact session token summary when Chinese is enabled', () => {
+  const ctx = baseContext();
+  ctx.config.display.showSessionTokens = true;
+  ctx.transcript.sessionTokens = {
+    inputTokens: 1500,
+    outputTokens: 250,
+    cacheCreationTokens: 500,
+    cacheReadTokens: 0,
+  };
+
+  setLanguage('zh');
+  try {
+    const line = stripAnsi(renderSessionLine(ctx));
+    assert.ok(line.includes('令牌: 2k (输入: 2k, 输出: 250)'), `unexpected zh compact token summary: ${line}`);
+    assert.ok(!line.includes('tok:'), `unexpected bare English token label in zh output: ${line}`);
+    assert.ok(!line.includes('in:'), `unexpected bare English input label in zh output: ${line}`);
+    assert.ok(!line.includes('out:'), `unexpected bare English output label in zh output: ${line}`);
+  } finally {
+    setLanguage('en');
+  }
 });
 
 // ---------------------------------------------------------------------------

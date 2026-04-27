@@ -82,9 +82,13 @@ export interface HudConfig {
         showLastRequestTokens: boolean;
         mergeGroups: HudElement[][];
         autocompactBuffer: AutocompactBufferMode;
+        contextWarningThreshold: number;
+        contextCriticalThreshold: number;
         usageThreshold: number;
         sevenDayThreshold: number;
         environmentThreshold: number;
+        externalUsagePath: string;
+        externalUsageFreshnessMs: number;
         modelFormat: ModelFormatMode;
         modelOverride: string;
         customLine: string;

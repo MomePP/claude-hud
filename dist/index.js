@@ -9,13 +9,16 @@ import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
+import { getUsageFromExternalSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
+export { getUsageFromExternalSnapshot } from "./external-usage.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 export async function main(overrides = {}) {
     const deps = {
         readStdin,
         getUsageFromStdin,
+        getUsageFromExternalSnapshot,
         parseTranscript,
         countConfigs,
         getGitStatus,
@@ -45,17 +48,22 @@ export async function main(overrides = {}) {
         }
         const transcriptPath = stdin.transcript_path ?? "";
         const transcript = await deps.parseTranscript(transcriptPath);
-        deps.applyContextWindowFallback(stdin, {}, transcript.sessionName);
+        deps.applyContextWindowFallback(stdin, {}, transcript.sessionName, {
+            lastCompactBoundaryAt: transcript.lastCompactBoundaryAt,
+            lastCompactPostTokens: transcript.lastCompactPostTokens,
+        });
         const { claudeMdCount, rulesCount, mcpCount, hooksCount, outputStyle } = await deps.countConfigs(stdin.cwd);
         const config = await deps.loadConfig();
         setLanguage(config.language);
         const gitStatus = config.gitStatus.enabled
             ? await deps.getGitStatus(stdin.cwd)
             : null;
-        // Usage comes only from Claude Code's official stdin rate_limits fields.
         let usageData = null;
         if (config.display.showUsage !== false) {
             usageData = deps.getUsageFromStdin(stdin);
+            if (!usageData) {
+                usageData = deps.getUsageFromExternalSnapshot(config, deps.now());
+            }
         }
         const extraCmd = deps.parseExtraCmdArg();
         const extraLabel = extraCmd ? await deps.runExtraCmd(extraCmd) : null;

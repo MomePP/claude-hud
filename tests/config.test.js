@@ -72,6 +72,8 @@ test('loadConfig returns valid config structure', async () => {
   assert.equal(typeof config.display.showMemoryUsage, 'boolean');
   assert.equal(typeof config.display.showCost, 'boolean');
   assert.equal(typeof config.display.showOutputStyle, 'boolean');
+  assert.equal(typeof config.display.externalUsagePath, 'string');
+  assert.equal(typeof config.display.externalUsageFreshnessMs, 'number');
   assert.ok(['full', 'compact', 'short'].includes(config.display.modelFormat), 'modelFormat should be valid');
   assert.equal(typeof config.display.modelOverride, 'string', 'modelOverride should be string');
   assert.equal(typeof config.colors, 'object');
@@ -152,6 +154,45 @@ test('mergeConfig preserves explicit git push thresholds', () => {
   assert.equal(config.gitStatus.pushCriticalThreshold, 30);
 });
 
+test('mergeConfig defaults context thresholds to 70/85', () => {
+  const config = mergeConfig({});
+  assert.equal(config.display.contextWarningThreshold, 70);
+  assert.equal(config.display.contextCriticalThreshold, 85);
+});
+
+test('mergeConfig preserves explicit context thresholds', () => {
+  const config = mergeConfig({
+    display: { contextWarningThreshold: 30, contextCriticalThreshold: 50 },
+  });
+  assert.equal(config.display.contextWarningThreshold, 30);
+  assert.equal(config.display.contextCriticalThreshold, 50);
+});
+
+test('mergeConfig clamps context thresholds to 0-100', () => {
+  const config = mergeConfig({
+    display: { contextWarningThreshold: -10, contextCriticalThreshold: 150 },
+  });
+  assert.equal(config.display.contextWarningThreshold, 0);
+  assert.equal(config.display.contextCriticalThreshold, 100);
+});
+
+test('mergeConfig falls back to defaults for invalid context thresholds', () => {
+  const config = mergeConfig({
+    display: { contextWarningThreshold: 'high', contextCriticalThreshold: null },
+  });
+  assert.equal(config.display.contextWarningThreshold, 70);
+  assert.equal(config.display.contextCriticalThreshold, 85);
+});
+
+test('mergeConfig preserves valid git branch overflow modes', () => {
+  assert.equal(mergeConfig({ gitStatus: { branchOverflow: 'wrap' } }).gitStatus.branchOverflow, 'wrap');
+  assert.equal(mergeConfig({ gitStatus: { branchOverflow: 'truncate' } }).gitStatus.branchOverflow, 'truncate');
+});
+
+test('mergeConfig falls back to truncate for invalid git branch overflow values', () => {
+  assert.equal(mergeConfig({ gitStatus: { branchOverflow: 'full' } }).gitStatus.branchOverflow, 'truncate');
+  assert.equal(mergeConfig({ gitStatus: { branchOverflow: null } }).gitStatus.branchOverflow, 'truncate');
+});
 test('mergeConfig defaults showOutputStyle to false', () => {
   const config = mergeConfig({});
   assert.equal(config.display.showOutputStyle, false);
@@ -197,6 +238,34 @@ test('mergeConfig preserves modelOverride and truncates long values', () => {
   const config = mergeConfig({ display: { modelOverride: override } });
   assert.equal(config.display.modelOverride.length, 80);
   assert.equal(config.display.modelOverride, override.slice(0, 80));
+});
+
+test('mergeConfig defaults external usage fallback settings', () => {
+  const config = mergeConfig({});
+  assert.equal(config.display.externalUsagePath, '');
+  assert.equal(config.display.externalUsageFreshnessMs, 300000);
+});
+
+test('mergeConfig preserves valid external usage fallback settings', () => {
+  const config = mergeConfig({
+    display: {
+      externalUsagePath: ' /tmp/usage.json ',
+      externalUsageFreshnessMs: 12345,
+    },
+  });
+  assert.equal(config.display.externalUsagePath, '/tmp/usage.json');
+  assert.equal(config.display.externalUsageFreshnessMs, 12345);
+});
+
+test('mergeConfig sanitizes invalid external usage fallback settings', () => {
+  const config = mergeConfig({
+    display: {
+      externalUsagePath: 123,
+      externalUsageFreshnessMs: -10,
+    },
+  });
+  assert.equal(config.display.externalUsagePath, '');
+  assert.equal(config.display.externalUsageFreshnessMs, 0);
 });
 
 test('mergeConfig falls back to empty for non-string modelOverride', () => {
@@ -398,7 +467,7 @@ test('mergeConfig accepts valid color overrides and filters invalid values', () 
   assert.equal(config.colors.custom, '#ff6600');
 });
 
-// --- Custom color value tests (256-color and hex) ---
+// --- Custom colour value tests (256-colour and hex) ---
 
 test('mergeConfig accepts 256-color index values', () => {
   const config = mergeConfig({
