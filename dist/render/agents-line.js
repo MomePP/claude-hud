@@ -1,4 +1,5 @@
 import { yellow, green, magenta, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 const MAX_RECENT_COMPLETED = 2;
 const MAX_AGENTS_SHOWN = 3;
 export function renderAgentsLine(ctx) {
@@ -20,9 +21,10 @@ export function renderAgentsLine(ctx) {
     if (toShow.length === 0) {
         return null;
     }
+    const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
     const lines = [];
     for (const agent of toShow) {
-        lines.push(formatAgent(agent, colors));
+        lines.push(formatAgent(agent, colors, namespaceMode));
     }
     return lines.join('\n');
 }
@@ -35,27 +37,15 @@ function getStatusIcon(status) {
             return green('✓');
     }
 }
-function formatAgent(agent, colors) {
+function formatAgent(agent, colors, namespaceMode) {
     const statusIcon = getStatusIcon(agent.status);
-    const type = magenta(formatAgentType(agent.type));
+    const type = magenta(formatNamespaced(agent.type, namespaceMode));
     const model = agent.model ? label(`[${agent.model}]`, colors) : '';
     const desc = agent.description
         ? label(`: ${truncateDesc(agent.description)}`, colors)
         : '';
     const elapsed = formatElapsed(agent);
     return `${statusIcon} ${type}${model ? ` ${model}` : ''}${desc} ${label(`(${elapsed})`, colors)}`;
-}
-// Drop any plugin namespace (`oac:code-execution` → `code-execution`,
-// `oh-my-claudecode:explore` → `explore`) and capitalize so it matches
-// the built-in style (`Code-execution`, `Explore`).
-function formatAgentType(rawType) {
-    const withoutNamespace = rawType.includes(':')
-        ? rawType.slice(rawType.lastIndexOf(':') + 1)
-        : rawType;
-    const trimmed = withoutNamespace.trim();
-    if (!trimmed)
-        return rawType;
-    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 function truncateDesc(desc, maxLen = 40) {
     if (desc.length <= maxLen)

@@ -21,6 +21,7 @@ export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
 export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName =
   | 'dim'
@@ -134,6 +135,7 @@ export interface HudConfig {
     branchGlyph: string;
     durationGlyph: string;
     barStyle: BarStyleMode;
+    agentNamespaceMode: AgentNamespaceMode;
   };
   colors: HudColorOverrides;
 }
@@ -203,6 +205,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     branchGlyph: '\ue725',
     durationGlyph: '\uf017',
     barStyle: 'block',
+    agentNamespaceMode: 'strip',
   },
   colors: {
     context: 'green',
@@ -260,6 +263,10 @@ function validateTimeFormat(value: unknown): value is TimeFormatMode {
 
 function validateProjectStyle(value: unknown): value is ProjectStyleMode {
   return value === 'pipes' || value === 'natural';
+}
+
+function validateAgentNamespaceMode(value: unknown): value is AgentNamespaceMode {
+  return value === 'strip' || value === 'badge' || value === 'raw';
 }
 
 function validateBarStyle(value: unknown): value is BarStyleMode {
@@ -589,6 +596,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     barStyle: validateBarStyle(migrated.display?.barStyle)
       ? migrated.display.barStyle
       : DEFAULT_CONFIG.display.barStyle,
+    agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
+      ? migrated.display.agentNamespaceMode
+      : DEFAULT_CONFIG.display.agentNamespaceMode,
   };
 
   const colors = {

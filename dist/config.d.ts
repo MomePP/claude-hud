@@ -14,6 +14,7 @@ export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
 export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -100,6 +101,7 @@ export interface HudConfig {
         branchGlyph: string;
         durationGlyph: string;
         barStyle: BarStyleMode;
+        agentNamespaceMode: AgentNamespaceMode;
     };
     colors: HudColorOverrides;
 }

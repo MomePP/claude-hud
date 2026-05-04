@@ -6,6 +6,8 @@ import * as path from 'node:path';
 
 import { parseTranscript } from '../dist/transcript.js';
 import { renderAgentsLine } from '../dist/render/agents-line.js';
+import { renderToolsLine } from '../dist/render/tools-line.js';
+import { formatNamespaced } from '../dist/render/format-namespace.js';
 
 function writeFixture(lines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-omc-'));
@@ -506,4 +508,132 @@ test('renderAgentsLine strips namespace and capitalizes for OMC subagents', () =
   assert.ok(line, 'should render a line for a completed OMC agent');
   assert.ok(line.includes('Explore'), `expected capitalized type, got: ${line}`);
   assert.ok(!line.includes('oh-my-claudecode:'), `expected namespace stripped, got: ${line}`);
+});
+
+test('formatNamespaced badge mode keeps the orchestrator visible', () => {
+  assert.equal(formatNamespaced('oac:code-execution', 'badge'), '[oac] Code-execution');
+  assert.equal(formatNamespaced('oh-my-claudecode:explore', 'badge'), '[oh-my-claudecode] Explore');
+  // No namespace → behaves like strip (still capitalize).
+  assert.equal(formatNamespaced('explore', 'badge'), 'Explore');
+});
+
+test('formatNamespaced raw mode passes through unchanged', () => {
+  assert.equal(formatNamespaced('oac:code-execution', 'raw'), 'oac:code-execution');
+  assert.equal(formatNamespaced('explore', 'raw'), 'explore');
+});
+
+test('formatNamespaced strip mode drops namespace and capitalizes (default)', () => {
+  assert.equal(formatNamespaced('oac:debugger', 'strip'), 'Debugger');
+  assert.equal(formatNamespaced('oh-my-claudecode:explore', 'strip'), 'Explore');
+  assert.equal(formatNamespaced('explore', 'strip'), 'Explore');
+});
+
+test('renderAgentsLine emits badge form when display.agentNamespaceMode is "badge"', () => {
+  const ctx = {
+    config: { colors: undefined, display: { agentNamespaceMode: 'badge' } },
+    transcript: {
+      tools: [],
+      todos: [],
+      agents: [
+        {
+          id: 'agent-badge',
+          type: 'oac:parallel-execution',
+          status: 'running',
+          startTime: new Date(Date.now() - 1000),
+        },
+      ],
+    },
+  };
+  const line = renderAgentsLine(ctx);
+  assert.ok(line, 'should render the agent line');
+  assert.ok(line.includes('[oac]'), `expected [oac] badge, got: ${line}`);
+  assert.ok(line.includes('Parallel-execution'), `expected capitalized local name, got: ${line}`);
+});
+
+test('renderAgentsLine passes raw type through when mode is "raw"', () => {
+  const ctx = {
+    config: { colors: undefined, display: { agentNamespaceMode: 'raw' } },
+    transcript: {
+      tools: [],
+      todos: [],
+      agents: [
+        {
+          id: 'agent-raw',
+          type: 'oac:debugger',
+          status: 'running',
+          startTime: new Date(Date.now() - 500),
+        },
+      ],
+    },
+  };
+  const line = renderAgentsLine(ctx);
+  assert.ok(line.includes('oac:debugger'), `expected raw type intact, got: ${line}`);
+});
+
+test('renderToolsLine formats Skill target via namespace strip (default)', () => {
+  const ctx = {
+    config: { colors: undefined },
+    transcript: {
+      tools: [
+        {
+          id: 'skill-1',
+          name: 'Skill',
+          target: 'oac:context-discovery',
+          status: 'running',
+          startTime: new Date(Date.now() - 1000),
+        },
+      ],
+      todos: [],
+      agents: [],
+    },
+  };
+  const line = renderToolsLine(ctx);
+  assert.ok(line, 'should render the tools line');
+  assert.ok(line.includes('Skill'), `expected Skill tool name, got: ${line}`);
+  assert.ok(line.includes('Context-discovery'), `expected capitalized skill name, got: ${line}`);
+  assert.ok(!line.includes('oac:'), `expected oac: prefix stripped, got: ${line}`);
+});
+
+test('renderToolsLine emits Skill target in badge form when configured', () => {
+  const ctx = {
+    config: { colors: undefined, display: { agentNamespaceMode: 'badge' } },
+    transcript: {
+      tools: [
+        {
+          id: 'skill-2',
+          name: 'Skill',
+          target: 'caveman:cavecrew',
+          status: 'running',
+          startTime: new Date(Date.now() - 1000),
+        },
+      ],
+      todos: [],
+      agents: [],
+    },
+  };
+  const line = renderToolsLine(ctx);
+  assert.ok(line.includes('[caveman]'), `expected [caveman] badge, got: ${line}`);
+  assert.ok(line.includes('Cavecrew'), `expected capitalized skill name, got: ${line}`);
+});
+
+test('renderToolsLine leaves non-Skill tool targets as paths (truncated)', () => {
+  const ctx = {
+    config: { colors: undefined },
+    transcript: {
+      tools: [
+        {
+          id: 'edit-1',
+          name: 'Edit',
+          target: '/tmp/sample.ts',
+          status: 'running',
+          startTime: new Date(Date.now() - 1000),
+        },
+      ],
+      todos: [],
+      agents: [],
+    },
+  };
+  const line = renderToolsLine(ctx);
+  assert.ok(line.includes('Edit'), `expected Edit tool name, got: ${line}`);
+  assert.ok(line.includes('sample.ts'), `expected file path target, got: ${line}`);
 });

@@ -82,6 +82,7 @@ export const DEFAULT_CONFIG = {
         branchGlyph: '\ue725',
         durationGlyph: '\uf017',
         barStyle: 'block',
+        agentNamespaceMode: 'strip',
     },
     colors: {
         context: 'green',
@@ -129,6 +130,9 @@ function validateTimeFormat(value) {
 }
 function validateProjectStyle(value) {
     return value === 'pipes' || value === 'natural';
+}
+function validateAgentNamespaceMode(value) {
+    return value === 'strip' || value === 'badge' || value === 'raw';
 }
 function validateBarStyle(value) {
     return value === 'block'
@@ -434,6 +438,9 @@ export function mergeConfig(userConfig) {
         barStyle: validateBarStyle(migrated.display?.barStyle)
             ? migrated.display.barStyle
             : DEFAULT_CONFIG.display.barStyle,
+        agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
+            ? migrated.display.agentNamespaceMode
+            : DEFAULT_CONFIG.display.agentNamespaceMode,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)

@@ -1,5 +1,6 @@
 import type { RenderContext, AgentEntry } from '../types.js';
 import { yellow, green, magenta, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 
 const MAX_RECENT_COMPLETED = 2;
 const MAX_AGENTS_SHOWN = 3;
@@ -26,9 +27,10 @@ export function renderAgentsLine(ctx: RenderContext): string | null {
     return null;
   }
 
+  const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
   const lines: string[] = [];
   for (const agent of toShow) {
-    lines.push(formatAgent(agent, colors));
+    lines.push(formatAgent(agent, colors, namespaceMode));
   }
   return lines.join('\n');
 }
@@ -47,10 +49,11 @@ function getStatusIcon(
 
 function formatAgent(
   agent: AgentEntry,
-  colors?: RenderContext['config']['colors']
+  colors: RenderContext['config']['colors'] | undefined,
+  namespaceMode: import('../config.js').AgentNamespaceMode
 ): string {
   const statusIcon = getStatusIcon(agent.status);
-  const type = magenta(formatAgentType(agent.type));
+  const type = magenta(formatNamespaced(agent.type, namespaceMode));
   const model = agent.model ? label(`[${agent.model}]`, colors) : '';
   const desc = agent.description
     ? label(`: ${truncateDesc(agent.description)}`, colors)
@@ -58,18 +61,6 @@ function formatAgent(
   const elapsed = formatElapsed(agent);
 
   return `${statusIcon} ${type}${model ? ` ${model}` : ''}${desc} ${label(`(${elapsed})`, colors)}`;
-}
-
-// Drop any plugin namespace (`oac:code-execution` → `code-execution`,
-// `oh-my-claudecode:explore` → `explore`) and capitalize so it matches
-// the built-in style (`Code-execution`, `Explore`).
-function formatAgentType(rawType: string): string {
-  const withoutNamespace = rawType.includes(':')
-    ? rawType.slice(rawType.lastIndexOf(':') + 1)
-    : rawType;
-  const trimmed = withoutNamespace.trim();
-  if (!trimmed) return rawType;
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function truncateDesc(desc: string, maxLen: number = 40): string {

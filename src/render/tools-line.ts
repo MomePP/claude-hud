@@ -1,9 +1,12 @@
 import type { RenderContext } from '../types.js';
 import { yellow, green, cyan, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
+import type { AgentNamespaceMode } from '../config.js';
 
 export function renderToolsLine(ctx: RenderContext): string | null {
   const { tools } = ctx.transcript;
   const colors = ctx.config?.colors;
+  const namespaceMode: AgentNamespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
 
   if (tools.length === 0) {
     return null;
@@ -15,7 +18,7 @@ export function renderToolsLine(ctx: RenderContext): string | null {
   const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
 
   for (const tool of runningTools.slice(-2)) {
-    const target = tool.target ? truncatePath(tool.target) : '';
+    const target = tool.target ? formatToolTarget(tool.name, tool.target, namespaceMode) : '';
     parts.push(`${yellow('◐')} ${cyan(formatToolName(tool.name))}${target ? label(`: ${target}`, colors) : ''}`);
   }
 
@@ -66,6 +69,23 @@ export function formatToolName(raw: string): string {
     scope = header;
   }
   return `${scope}:${fn}`;
+}
+
+// The `Skill` tool's target is the skill identifier, which arrives as a
+// namespaced slug (`oac:context-discovery`, `caveman:cavecrew`). Apply the
+// same namespace formatting we use for agent types so `Skill: Context-discovery`
+// (strip) or `Skill: [oac] Context-discovery` (badge) lands on the tools line
+// instead of the raw slug. All other tool targets render through `truncatePath`
+// unchanged — they're file paths, not identifiers.
+export function formatToolTarget(
+  toolName: string,
+  rawTarget: string,
+  namespaceMode: AgentNamespaceMode
+): string {
+  if (toolName === 'Skill') {
+    return formatNamespaced(rawTarget, namespaceMode);
+  }
+  return truncatePath(rawTarget);
 }
 
 function truncatePath(path: string, maxLen: number = 20): string {

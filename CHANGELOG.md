@@ -4,6 +4,40 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-04 — MomePP fork (configurable namespace mode + Skill formatting)
+
+Adds `display.agentNamespaceMode` to give users control over how
+namespaced subagent types and `Skill` targets render. Default
+(`strip`) preserves 0.3.1 output; `badge` is the new affordance for
+multi-orchestrator users (OAC + OMC at once); `raw` restores the
+pre-0.1.0 pass-through. The `Skill` tool target now flows through
+the same formatter as agent types — both surfaces stay in sync.
+
+### Added — fork
+- `display.agentNamespaceMode` (`strip` | `badge` | `raw`, default `strip`).
+  - `strip` — `oac:code-execution` → `Code-execution`,
+    `Skill: oac:context-discovery` → `Skill: Context-discovery`.
+  - `badge` — `oac:code-execution` → `[oac] Code-execution`,
+    `Skill: oac:context-discovery` → `Skill: [oac] Context-discovery`.
+    Keeps orchestrator visible; useful when OAC and OMC are both active.
+  - `raw` — pass-through (`oac:code-execution`).
+- New shared helper `src/render/format-namespace.ts`. `formatNamespaced(raw, mode)`
+  is the single source of truth for namespace handling on both the agents
+  line and the `Skill` tool target. `src/render/agents-line.ts` and
+  `src/render/tools-line.ts` both call it; the previously inline
+  `formatAgentType` logic was hoisted into the helper.
+- New `formatToolTarget(toolName, rawTarget, mode)` in `src/render/tools-line.ts`
+  routes `Skill` targets through `formatNamespaced` while leaving
+  every other tool's target on the existing `truncatePath` path
+  (file-path tools are unaffected).
+
+### Tests
+8 new render-layer cases in `tests/transcript-omc.test.js`:
+3 helper unit tests (one per mode), 2 agents-line tests covering
+`badge` and `raw`, and 3 tools-line tests covering Skill (strip),
+Skill (badge), and a non-Skill tool target as a regression guard.
+Total: 568 / 567 pass / 1 skip / 0 fail.
+
 ## [0.3.1] - 2026-05-04 — MomePP fork (upstream sync + OAC-focus + drift fixes)
 
 Pulls the latest upstream `jarrodwatts/claude-hud` (`b53c3f0`, 5 commits past
