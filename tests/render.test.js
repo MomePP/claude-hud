@@ -977,7 +977,7 @@ test('renderAgentsLine renders completed agents', () => {
   ];
 
   const line = renderAgentsLine(ctx);
-  assert.ok(line?.includes('explore'));
+  assert.ok(line?.includes('Explore'));
   assert.ok(line?.includes('haiku'));
 });
 
@@ -1941,7 +1941,7 @@ test('render expanded layout honors custom elementOrder including activity place
   const combinedIndex = lines.findIndex(line => line.includes('Usage') && line.includes('Context'));
   const memoryIndex = lines.findIndex(line => line.includes('Approx RAM'));
   const environmentIndex = lines.findIndex(line => line.includes('CLAUDE.md'));
-  const agentIndex = lines.findIndex(line => line.includes('planner'));
+  const agentIndex = lines.findIndex(line => line.includes('Planner'));
   const todoIndex = lines.findIndex(line => line.includes('todo-marker'));
 
   assert.deepEqual(

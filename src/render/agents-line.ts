@@ -50,7 +50,7 @@ function formatAgent(
   colors?: RenderContext['config']['colors']
 ): string {
   const statusIcon = getStatusIcon(agent.status);
-  const type = magenta(agent.type);
+  const type = magenta(formatAgentType(agent.type));
   const model = agent.model ? label(`[${agent.model}]`, colors) : '';
   const desc = agent.description
     ? label(`: ${truncateDesc(agent.description)}`, colors)
@@ -58,6 +58,18 @@ function formatAgent(
   const elapsed = formatElapsed(agent);
 
   return `${statusIcon} ${type}${model ? ` ${model}` : ''}${desc} ${label(`(${elapsed})`, colors)}`;
+}
+
+// Drop any plugin namespace (`oac:code-execution` → `code-execution`,
+// `oh-my-claudecode:explore` → `explore`) and capitalize so it matches
+// the built-in style (`Code-execution`, `Explore`).
+function formatAgentType(rawType: string): string {
+  const withoutNamespace = rawType.includes(':')
+    ? rawType.slice(rawType.lastIndexOf(':') + 1)
+    : rawType;
+  const trimmed = withoutNamespace.trim();
+  if (!trimmed) return rawType;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function truncateDesc(desc: string, maxLen: number = 40): string {

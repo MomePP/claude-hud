@@ -2,7 +2,7 @@
 
 A Claude Code plugin that shows what's happening — context usage, active tools, running agents, and todo progress. Always visible below your input.
 
-**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC) and my own workflow. If you're looking for the upstream, go there — this one is deliberately narrower in scope.
+**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned primarily for [OpenAgentsControl](https://github.com/openagentscontrol/oac) (OAC) on Claude Code, with leftover compatibility for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC). If you're looking for the upstream, go there — this one is deliberately narrower in scope.
 
 ![Claude HUD in action](claude-hud-preview-5-2.png)
 
@@ -11,13 +11,13 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 | What upstream does | What this fork does |
 |---|---|
 | Displays `unknown` when an Agent tool call omits `subagent_type` | Falls back to the caller-supplied `name`, then `general-purpose` (the actual Claude Code default) |
-| Doesn't understand OMC's `proxy_Edit` / `proxy_Task` / etc. | Strips `proxy_` and routes them identically to native tools |
-| Leaves background (`run_in_background`) agents stuck as "running" forever | Parses `<task-notification>` blocks to mark them completed |
-| Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long session perf win) |
+| Renders namespaced agent types raw — `oac:code-execution`, `oh-my-claudecode:explore` | Strips the `namespace:` prefix and capitalizes — shows as `Code-execution`, `Explore` |
+| Leaves background (`run_in_background`) agents stuck as "running" forever | Parses `<task-notification>` blocks to mark them completed (OAC's parallel-execution / oac:parallel-execution flow relies on this) |
+| Doesn't understand OMC's `proxy_Edit` / `proxy_Task` shim | Strips `proxy_` and routes them identically to native tools (OMC-only; OAC uses native tools and `Skill`, no proxy layer) |
+| Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long-OAC-orchestrator perf win) |
 | Cross-platform (darwin / linux / win32 / powershell) | **macOS/Linux only** — Windows branches removed from setup |
 | CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
 | Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships a launcher at `scripts/claude-hud.sh`; `settings.json` just points at it |
-| Agent labels render as `oh-my-claudecode:explore` | Strips the `namespace:` prefix and capitalizes — shows as `Explore` |
 | — | Thinking-state and pending-permission indicators on the project line |
 
 ## Limitations
@@ -156,7 +156,11 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showUsage` | boolean | true | Show Claude subscriber usage limits when available |
 | `display.usageBarEnabled` | boolean | true | Display usage as visual bar instead of text |
 | `display.sevenDayThreshold` | 0-100 | 80 | Show 7-day usage when >= threshold (0 = always) |
-| `display.showTokenBreakdown` | boolean | true | Show token details at high context (85%+) |
+| `display.contextWarningThreshold` | 0-100 | 70 | Context-bar percentage at which colours switch from `colors.context` to `colors.warning`. Inherited from upstream. |
+| `display.contextCriticalThreshold` | 0-100 | 85 | Context-bar percentage at which colours switch to `colors.critical` and the token breakdown unlocks. Inherited from upstream. |
+| `display.usageThreshold` | 0-100 | 0 | Hide the 5-hour usage bar/text until usage reaches this percentage (`0` = always show). Inherited from upstream. |
+| `display.environmentThreshold` | 0-100 | 0 | Hide the environment counts line (`CLAUDE.md / rules / MCPs / hooks`) until at least this many entries exist (`0` = always show). Inherited from upstream. |
+| `display.showTokenBreakdown` | boolean | true | Show token details once context reaches `display.contextCriticalThreshold` (default 85%) |
 | `display.showTools` | boolean | false | Show tools activity line |
 | `display.showAgents` | boolean | false | Show agents activity line |
 | `display.showTodos` | boolean | false | Show todos progress line |
@@ -164,7 +168,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showClaudeCodeVersion` | boolean | false | Show the installed Claude Code version, e.g. `CC v2.1.81` |
 | `display.showMemoryUsage` | boolean | false | Show an approximate system RAM usage line in expanded layout |
 | `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
-| `display.showPendingPermission` | boolean | true | Inline `? <target>` hint on the project line while an Edit/Write/Bash permission prompt is pending (≤3s window) |
+| `display.showPendingPermission` | boolean | true | Inline `? <target> (waiting Ns)` hint on the project line while an Edit/Write/Bash permission prompt is pending. Counter ticks until the matching `tool_result` lands; capped at a 5-minute wall-clock window with a 30s interrupt-grace check |
 | `display.showLastRequestTokens` | boolean | false | Inline `last: 12k→678` counter showing the most recent assistant turn's input and output tokens; appends `(+Xk)` when reasoning tokens are present |
 | `display.showEffortLevel` | boolean | false | Append the active reasoning effort to the model bracket, e.g. `[Opus · high]`. Inherited from upstream. |
 | `display.showPromptCache` | boolean | false | Show a dedicated prompt-cache countdown line (`promptCache` element). Inherited from upstream. |
@@ -336,9 +340,9 @@ npm test
 
 After changing anything in `src/`, rebuild and commit `dist/` alongside the source — there's no CI that will do it for you.
 
-### OMC-specific tests
+### Orchestrator-compat tests
 
-The parser-behavior tests for OMC compatibility (proxy_ stripping, agent fallback, background-agent completion, tail-parsing) live in `tests/transcript-omc.test.js`. Run them on their own:
+Parser-behavior tests for orchestrator compatibility — agent-type fallback (OAC + OMC), namespaced subagent rendering (`oac:code-execution`, `oh-my-claudecode:explore`), background-agent completion via `<task-notification>`, OMC's `proxy_` stripping, and tail-parsing — live in `tests/transcript-omc.test.js` (file kept under the legacy name to preserve git history). Run them on their own:
 
 ```bash
 node --test tests/transcript-omc.test.js
@@ -349,7 +353,7 @@ node --test tests/transcript-omc.test.js
 ## Credit
 
 All of the HUD rendering, configuration flow, preset logic, and design choices come from
-[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of OMC-specific fixes and perf tweaks on top.
+[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of orchestrator-compat fixes (primarily for OAC on Claude Code, secondarily for OMC) and perf tweaks on top.
 
 ## License
 

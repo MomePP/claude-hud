@@ -98,16 +98,18 @@ Lines 1-2 always shown. Additional lines are opt-in via config:
 
 Inline indicators on the project line (fork additions):
 - Thinking (`showThinkingIndicator`, default true): `∿ thinking` while extended-thinking blocks land within a 30s window.
-- Pending permission (`showPendingPermission`, default true): `? <target>` when an Edit/Write/Bash call is within its 3s approval window.
+- Pending permission (`showPendingPermission`, default true): `? <target> (waiting Ns)` when an Edit/Write/Bash `tool_use` has no matching `tool_result` yet. Counter ticks until the result lands. Capped at a 5-minute wall-clock window (`PENDING_PERMISSION_MAX_AGE_MS`) with a 30s interrupt-grace check (`PENDING_PERMISSION_INTERRUPT_GRACE_MS`) — both in `src/transcript.ts`.
 - Last-request tokens (`showLastRequestTokens`, default false): `last: 12k→678` from the most recent assistant usage, plus `(+Xk)` when reasoning tokens are present.
 
 ### Context Thresholds
 
+Defaults — both configurable via `display.contextWarningThreshold` and `display.contextCriticalThreshold` (0-100):
+
 | Threshold | Color | Action |
 |-----------|-------|--------|
-| <70% | Green | Normal |
+| <70% (warning) | Green | Normal |
 | 70-85% | Yellow | Warning |
-| >85% | Red | Show token breakdown |
+| ≥85% (critical) | Red | Show token breakdown when `display.showTokenBreakdown` is true |
 
 ## Plugin Configuration
 

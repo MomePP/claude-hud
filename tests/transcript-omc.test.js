@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { parseTranscript } from '../dist/transcript.js';
+import { renderAgentsLine } from '../dist/render/agents-line.js';
 
 function writeFixture(lines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-omc-'));
@@ -456,4 +457,53 @@ test('pendingPermission picks the youngest still-open entry when multiple exist'
   assert.ok(result.pendingPermission, 'expected a pending permission entry');
   assert.equal(result.pendingPermission.toolName, 'Edit', 'youngest entry should win');
   assert.equal(result.pendingPermission.targetSummary, 'auth.ts');
+});
+
+test('renderAgentsLine strips namespace and capitalizes for OAC subagents', () => {
+  const ctx = {
+    config: { colors: undefined },
+    transcript: {
+      tools: [],
+      todos: [],
+      agents: [
+        {
+          id: 'agent-oac',
+          type: 'oac:code-execution',
+          model: 'sonnet',
+          description: 'Implementing JWT middleware',
+          status: 'running',
+          startTime: new Date(Date.now() - 5000),
+        },
+      ],
+    },
+  };
+
+  const line = renderAgentsLine(ctx);
+  assert.ok(line, 'should render a line for an active OAC agent');
+  assert.ok(line.includes('Code-execution'), `expected capitalized type, got: ${line}`);
+  assert.ok(!line.includes('oac:'), `expected the oac: prefix to be stripped, got: ${line}`);
+});
+
+test('renderAgentsLine strips namespace and capitalizes for OMC subagents', () => {
+  const ctx = {
+    config: { colors: undefined },
+    transcript: {
+      tools: [],
+      todos: [],
+      agents: [
+        {
+          id: 'agent-omc',
+          type: 'oh-my-claudecode:explore',
+          status: 'completed',
+          startTime: new Date(0),
+          endTime: new Date(1000),
+        },
+      ],
+    },
+  };
+
+  const line = renderAgentsLine(ctx);
+  assert.ok(line, 'should render a line for a completed OMC agent');
+  assert.ok(line.includes('Explore'), `expected capitalized type, got: ${line}`);
+  assert.ok(!line.includes('oh-my-claudecode:'), `expected namespace stripped, got: ${line}`);
 });

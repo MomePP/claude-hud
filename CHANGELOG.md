@@ -4,6 +4,80 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-04 — MomePP fork (upstream sync + OAC-focus + drift fixes)
+
+Pulls the latest upstream `jarrodwatts/claude-hud` (`b53c3f0`, 5 commits past
+`0.3.0`'s sync point), reframes the fork around OpenAgentsControl on Claude
+Code, restores a render-layer feature lost in an earlier rebase, and patches
+three doc/code drifts found during a fork-claims audit.
+
+### Added — from upstream
+- CJK ambiguous-width glyph handling (a003624). New `src/render/width.ts`
+  centralises wide-char tables and gates an ambiguous-width pass on
+  `isCjkAmbiguousWide()` (only triggers when `language: zh`). Fixes wrap
+  miscalculation when bars/separators (`█ ░ │ ─ ◐ ✓`) render as 2 cells in
+  CJK terminals. `makeSeparator()` now halves dash count under CJK so the
+  rendered separator no longer overflows and forces terminal-side wrap.
+  Adds 3 width-aware render tests.
+
+### Fixed
+- **Restored `formatAgentType()` namespace strip + capitalize** in
+  `src/render/agents-line.ts`. Added in 0.1.0 (commit `24edbe2`), silently
+  lost in a later rebase. Without it, OAC subagents (`oac:code-execution`,
+  `oac:debugger`, `oac:parallel-execution`) and OMC subagents
+  (`oh-my-claudecode:explore`) rendered raw in the agents line. Now strips
+  the `<namespace>:` prefix and capitalizes the first letter — `oac:debugger`
+  → `Debugger`, matching the README claim that had been stale for two
+  releases. Adds 2 render-layer tests in `tests/transcript-omc.test.js`
+  covering both the OAC and OMC namespaces.
+- **Doc drift: pending-permission window**. README and CLAUDE.md claimed
+  `≤3s window` for the `? <target>` indicator. Actual code (since 0.1.7)
+  uses a 5-minute wall-clock cap (`PENDING_PERMISSION_MAX_AGE_MS`) plus a
+  30s interrupt-grace check (`PENDING_PERMISSION_INTERRUPT_GRACE_MS`). Docs
+  now describe the real behavior and reference the constants in
+  `src/transcript.ts`.
+- **Doc drift: pending-permission format**. Docs claimed `? <target>`;
+  actual render emits `? <target> (waiting Ns)` with a live counter. Format
+  table updated.
+- **Doc drift: missing config keys**. Added README option-table rows for
+  `display.contextWarningThreshold` (default 70),
+  `display.contextCriticalThreshold` (default 85),
+  `display.usageThreshold` (default 0), and
+  `display.environmentThreshold` (default 0) — all already accepted by
+  `src/config.ts` and surfaced by `commands/configure.md`, but absent from
+  the README option table. Also rewrote `display.showTokenBreakdown`
+  description so it references the configurable critical threshold instead
+  of the hardcoded `85%`. CLAUDE.md "Context Thresholds" table now notes
+  configurability.
+- Stale `dist/usage-api.*` bundle dropped. Source was removed upstream by
+  `3aebe1b` ("Simplify usage display to stdin only"); the compiled output
+  had been lingering.
+
+### Changed
+- README + plugin.json + marketplace.json reframed: **OpenAgentsControl on
+  Claude Code is now the primary use case**, oh-my-claudecode (OMC) is
+  documented as leftover compatibility. Fork-features matrix updated to
+  use `oac:code-execution → Code-execution` as the namespace-strip
+  example (was `oh-my-claudecode:explore → Explore`). `proxy_Edit`/`proxy_Task`
+  row marked OMC-only since OAC uses native tools + `Skill`. Tests
+  section renamed "Orchestrator-compat tests" (file kept as
+  `tests/transcript-omc.test.js` to preserve git history).
+
+### Skipped — from upstream
+- `fix(setup)`: POSIX `[[:space:]]` grep pattern (517b6f4). Not
+  applicable — the fork's `commands/setup.md` uses
+  `scripts/claude-hud.sh` launcher, no `awk | grep` version-resolution
+  pipeline. Fork keeps `--ours` for `setup.md`.
+
+### Preserved — fork features (no regressions)
+All 0.3.0 fork features still rendering correctly: Skill tool target,
+last-request tokens, thinking indicator (now alongside the restored
+namespace strip), pending permission, speed-tracker per-session cache,
+post-compact context reset, configurable color thresholds, taskIds across
+duplicate-content todos, Haiku 4.x pricing, launcher infra, MCP tool-name
+compression, natural project style + glyphs + 7 bar styles. Tests:
+559 pass / 1 skip / 0 fail (2 new render-strip tests added).
+
 ## [0.3.0] - 2026-04-27 — MomePP fork (upstream sync)
 
 Pulls upstream `jarrodwatts/claude-hud` past `v0.1.0` into the fork.
