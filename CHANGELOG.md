@@ -4,6 +4,108 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-10 — MomePP fork (upstream sync — /add-dir, forceMaxWidth, bar char overrides)
+
+Pulls 30 upstream commits since 0.3.2's sync point, bringing in workspace
+`/add-dir` rendering, `forceMaxWidth`, Linux memory accuracy, bar-char
+validation hardening, and a barFilled/barEmpty color override. Bumped to
+0.4.0 (not 0.3.3) because the new `addedDirs` element is on by default in
+`pipes` mode — pipes-style users will see new `+name` chips on the project
+line whenever `/add-dir` is in use.
+
+### Added — from upstream
+- **Workspace `/add-dir` directories on the project line.** New
+  `addedDirs` HudElement, `display.showAddedDirs` (default true),
+  `display.addedDirsLayout` (`inline` | `line`, default `inline`).
+  Inline renders `+name` chips next to the project; `line` renders a
+  separate `Added dirs: name1, name2` line. Capped at 5 entries
+  with `+N more` overflow; basenames truncated to 24 chars.
+  Includes new `src/render/lines/added-dirs.ts` with the shared
+  `sanitize` / `basenameOf` / `truncateBasename` / `normalizeAddedDirs`
+  helpers (replaces the per-file `CONTROL_AND_BIDI_PATTERN` regex
+  the fork carried).
+- **`forceMaxWidth`** (default false). When set with `maxWidth`,
+  always uses `maxWidth` even if terminal-width detection reports a
+  smaller value. Useful for tmux edge cases.
+- **`colors.barFilled` / `colors.barEmpty`** char overrides. When
+  set, override the filled / empty character of progress bars
+  (composes with fork's `display.barStyle` — see Fixed below).
+- **Linux memory accuracy fix.** `showMemoryUsage` now reads
+  `MemAvailable` from `/proc/meminfo` instead of `os.freemem()`,
+  giving a more honest "used" number on Linux.
+- **Context zero-usage guards.** Treats nonzero token totals with
+  zero usage as suspicious (avoids the "0%" flicker some Claude
+  Code builds emit) while still honouring live zero-percent usage
+  data when totals are zero too.
+- **Effort symbol spacing fix** in `pipes` mode. Restored from
+  upstream — fork had silently dropped effort-level rendering in
+  pipes mode during an earlier rebase. Now renders again when
+  `display.showEffortLevel: true` (default false, so quiet by
+  default).
+- **Bar char validation hardening.** Invalid `barFilled` /
+  `barEmpty` inputs are rejected: control chars, C1 controls,
+  bidi/format chars, zero-width joiners, variation selectors,
+  line/paragraph separators, noncharacters, and multi-grapheme
+  strings. Falls back to the default when invalid.
+
+### Fixed — fork
+- **`display.barStyle` no longer silently disabled.** Mid-merge
+  the new `colors.barFilled` (default `'█'`) and `colors.barEmpty`
+  (default `'░'`) override would always win, defeating
+  `barStyle: dots|square|thin|vertical|shade|double` for every
+  existing user. `colors.barFilled` / `colors.barEmpty` are now
+  optional (`string | undefined`) with no default — `barStyle`
+  picks chars by default; per-char overrides take effect only when
+  the user explicitly sets them.
+
+### Conflict resolutions (kept fork features intact)
+- `src/render/lines/project.ts` — preserved `formatCompactCount`,
+  `getProjectPath`, `buildExtras` (with `∿ thinking`,
+  `? <target>`, `last:` indicators) while adopting upstream's
+  `added-dirs.ts` helpers; restored upstream effort-level rendering
+  in pipes mode; merged upstream's inline addedDirs rendering with
+  fork's `gitStatus.branchOverflow: 'wrap'` support.
+- `src/render/colors.ts` — `quotaBar` / `coloredBar` now compose
+  `display.barStyle` with `colors.barFilled` / `colors.barEmpty`
+  (style picks defaults, override wins when set).
+- `src/config.ts` — union of fork's `colors.thinking` /
+  `colors.duration` plus upstream's `colors.barFilled` /
+  `colors.barEmpty` (now optional) and `addedDirs` HudElement /
+  `AddedDirsLayout`.
+- `README.md` — kept fork's `colors.thinking` / `colors.duration`
+  rows; added upstream's `forceMaxWidth`, `barFilled`, `barEmpty`
+  rows.
+
+### Known feature gap
+- **`display.projectStyle: 'natural'` does not render inline
+  `+addedDirs`.** `renderNaturalProjectLine` doesn't currently
+  call `normalizeAddedDirs` — the inline `+name` chip is
+  pipes-only. Natural-mode users who want to see `/add-dir`
+  entries should set `display.addedDirsLayout: 'line'` to get the
+  separate `Added dirs: …` line via the `addedDirs` element. Will
+  address parity in a follow-up.
+
+### Default-behavior changes visible on update
+- `addedDirs` added to `DEFAULT_ELEMENT_ORDER` between `project`
+  and `context`. If you have a custom `display.elementOrder` it
+  still works but won't include `addedDirs` unless added.
+- `display.showAddedDirs: true` and
+  `display.addedDirsLayout: 'inline'` are the defaults — pipes
+  users will see new `+name` chips beside the project name when
+  `/add-dir` is in use. Set `display.showAddedDirs: false` to
+  match pre-0.4.0 behavior.
+- Effort-level re-enabled in pipes mode (only when
+  `display.showEffortLevel: true`, default false).
+
+### Tests
+- 606 / 0 fail / 1 skipped on the merged tree.
+- All fork-specific suites (`project-indicators.test.js`,
+  `transcript-omc.test.js`, `mcp-tool-name.test.js`) still pass —
+  total 68 fork-specific cases.
+
+Bumped: `package.json`, `.claude-plugin/plugin.json`,
+`.claude-plugin/marketplace.json` → 0.4.0.
+
 ## [0.3.2] - 2026-05-04 — MomePP fork (configurable namespace mode + Skill formatting)
 
 Adds `display.agentNamespaceMode` to give users control over how

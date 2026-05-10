@@ -148,7 +148,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `gitStatus.branchOverflow` | `truncate` \| `wrap` | `truncate` | In **pipes** mode only, `wrap` lets a long branch name render on its own line (project + `git:(...)` become two parts joined by ` │ `). Inherited from upstream. |
 | `display.showModel` | boolean | true | Show model name `[Opus]` |
 | `display.showAddedDirs` | boolean | true | Show extra workspace directories from `/add-dir` (e.g. `+sparkle +lib-foo`); empty array renders nothing. In both layouts at most 5 dirs render (overflow shown as `+N more`) and basenames are truncated to 24 chars with `…` |
-| `display.addedDirsLayout` | `inline` \| `line` | `inline` | `inline` puts dirs next to the project name with a `+name` prefix per dir; `line` renders them on a separate `Added dirs: name1, name2` line (no `+` prefix, comma-separated) |
+| `display.addedDirsLayout` | `inline` \| `line` | `inline` | `inline` puts dirs next to the project name with a `+name` prefix per dir; `line` renders them on a separate `Added dirs: name1, name2` line (no `+` prefix, comma-separated). **Note**: inline layout currently renders only in `display.projectStyle: 'pipes'`. Users on `natural` project style should set this to `'line'` to see `/add-dir` entries. |
 | `display.showContextBar` | boolean | true | Show visual context bar `████░░░░░░` |
 | `display.contextValue` | `percent` \| `tokens` \| `remaining` \| `both` | `percent` | Context display format (`45%`, `45k/200k`, `55%` remaining, or `45% (45k/200k)`) |
 | `display.showConfigCounts` | boolean | false | Show CLAUDE.md, rules, MCPs, hooks counts |
