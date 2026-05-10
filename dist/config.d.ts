@@ -34,8 +34,8 @@ export interface HudColorOverrides {
     custom: HudColorValue;
     thinking: HudColorValue;
     duration: HudColorValue;
-    barFilled: string;
-    barEmpty: string;
+    barFilled?: string;
+    barEmpty?: string;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];

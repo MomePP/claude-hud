@@ -52,8 +52,8 @@ export interface HudColorOverrides {
   custom: HudColorValue;
   thinking: HudColorValue;
   duration: HudColorValue;
-  barFilled: string;
-  barEmpty: string;
+  barFilled?: string;
+  barEmpty?: string;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -232,8 +232,6 @@ export const DEFAULT_CONFIG: HudConfig = {
     custom: 208,
     thinking: 'dim',
     duration: 'dim',
-    barFilled: '█',
-    barEmpty: '░',
   },
 };
 
@@ -679,10 +677,10 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       : DEFAULT_CONFIG.colors.duration,
     barFilled: validateBarChar(migrated.colors?.barFilled)
       ? migrated.colors.barFilled
-      : DEFAULT_CONFIG.colors.barFilled,
+      : undefined,
     barEmpty: validateBarChar(migrated.colors?.barEmpty)
       ? migrated.colors.barEmpty
-      : DEFAULT_CONFIG.colors.barEmpty,
+      : undefined,
   };
 
   return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };

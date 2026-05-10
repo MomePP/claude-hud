@@ -201,8 +201,8 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `colors.custom` | color value | `208` | Color for the optional custom line |
 | `colors.thinking` | color value | `dim` | Color for the inline `∿ thinking` indicator (defaults to dim so it stays out of the way; override with any named color, 256-color number, or hex). |
 | `colors.duration` | color value | `dim` | Color for the session-duration extra (the `<glyph> 1h 30m` token). Independent of `colors.label` so you can keep `Context`/`Usage` labels dim while bumping the duration. |
-| `colors.barFilled` | string | `█` | Character used for the filled portion of progress bars. Overrides `display.barStyle`'s filled character when set. Inherited from upstream. |
-| `colors.barEmpty` | string | `░` | Character used for the empty portion of progress bars. Overrides `display.barStyle`'s empty character when set. Inherited from upstream. |
+| `colors.barFilled` | string | _(unset — uses `display.barStyle`)_ | Character used for the filled portion of progress bars. When set, overrides `display.barStyle`'s filled character. When unset (default), bars use the `display.barStyle` character set. Inherited from upstream. |
+| `colors.barEmpty` | string | _(unset — uses `display.barStyle`)_ | Character used for the empty portion of progress bars. When set, overrides `display.barStyle`'s empty character. When unset (default), bars use the `display.barStyle` character set. Inherited from upstream. |
 
 `colors.barFilled` and `colors.barEmpty` accept a single visible grapheme. Control characters, invisible format characters (bidi controls, zero-width joiners, variation selectors), line/paragraph separators, and noncharacters are rejected. Wide characters (emoji, CJK) may affect bar alignment depending on the terminal.
 

@@ -102,8 +102,6 @@ export const DEFAULT_CONFIG = {
         custom: 208,
         thinking: 'dim',
         duration: 'dim',
-        barFilled: '█',
-        barEmpty: '░',
     },
 };
 export function getConfigPath() {
@@ -512,10 +510,10 @@ export function mergeConfig(userConfig) {
             : DEFAULT_CONFIG.colors.duration,
         barFilled: validateBarChar(migrated.colors?.barFilled)
             ? migrated.colors.barFilled
-            : DEFAULT_CONFIG.colors.barFilled,
+            : undefined,
         barEmpty: validateBarChar(migrated.colors?.barEmpty)
             ? migrated.colors.barEmpty
-            : DEFAULT_CONFIG.colors.barEmpty,
+            : undefined,
     };
     return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };
 }
