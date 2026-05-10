@@ -22,7 +22,9 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
-export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+
+export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName =
   | 'dim'
   | 'red'
@@ -50,10 +52,13 @@ export interface HudColorOverrides {
   custom: HudColorValue;
   thinking: HudColorValue;
   duration: HudColorValue;
+  barFilled: string;
+  barEmpty: string;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
   'project',
+  'addedDirs',
   'context',
   'usage',
   'promptCache',
@@ -76,6 +81,7 @@ export interface HudConfig {
   showSeparators: boolean;
   pathLevels: 1 | 2 | 3;
   maxWidth: number | null;
+  forceMaxWidth: boolean;
   elementOrder: HudElement[];
   gitStatus: {
     enabled: boolean;
@@ -90,6 +96,8 @@ export interface HudConfig {
   display: {
     showModel: boolean;
     showProject: boolean;
+    showAddedDirs: boolean;
+    addedDirsLayout: AddedDirsLayout;
     showContextBar: boolean;
     contextValue: ContextValueMode;
     showConfigCounts: boolean;
@@ -146,6 +154,7 @@ export const DEFAULT_CONFIG: HudConfig = {
   showSeparators: false,
   pathLevels: 1,
   maxWidth: null,
+  forceMaxWidth: false,
   elementOrder: [...DEFAULT_ELEMENT_ORDER],
   gitStatus: {
     enabled: true,
@@ -160,6 +169,8 @@ export const DEFAULT_CONFIG: HudConfig = {
   display: {
     showModel: true,
     showProject: true,
+    showAddedDirs: true,
+    addedDirsLayout: 'inline',
     showContextBar: true,
     contextValue: 'percent',
     showConfigCounts: false,
@@ -221,6 +232,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     custom: 208,
     thinking: 'dim',
     duration: 'dim',
+    barFilled: '█',
+    barEmpty: '░',
   },
 };
 
@@ -288,6 +301,20 @@ function validateColorName(value: unknown): value is HudColorName {
     || value === 'cyan'
     || value === 'brightBlue'
     || value === 'brightMagenta';
+}
+
+const UNSAFE_CODEPOINT = /[\p{Cc}\p{Cf}\p{Variation_Selector}\p{Zl}\p{Zp}\p{Cn}]/u;
+
+function validateBarChar(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  if (Array.from(segmenter.segment(value)).length !== 1) return false;
+
+  for (const ch of value) {
+    if (UNSAFE_CODEPOINT.test(ch)) return false;
+  }
+  return true;
 }
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
@@ -442,6 +469,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
   const maxWidth = validateMaxWidth(migrated.maxWidth);
 
   const elementOrder = validateElementOrder(migrated.elementOrder);
+  const forceMaxWidth = typeof (migrated as Record<string, unknown>).forceMaxWidth === 'boolean'
+    ? (migrated as Record<string, unknown>).forceMaxWidth as boolean
+    : DEFAULT_CONFIG.forceMaxWidth;
 
   const gitStatus = {
     enabled: typeof migrated.gitStatus?.enabled === 'boolean'
@@ -473,6 +503,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showProject: typeof migrated.display?.showProject === 'boolean'
       ? migrated.display.showProject
       : DEFAULT_CONFIG.display.showProject,
+    showAddedDirs: typeof migrated.display?.showAddedDirs === 'boolean'
+      ? migrated.display.showAddedDirs
+      : DEFAULT_CONFIG.display.showAddedDirs,
+    addedDirsLayout: (migrated.display?.addedDirsLayout === 'inline' || migrated.display?.addedDirsLayout === 'line')
+      ? migrated.display.addedDirsLayout
+      : DEFAULT_CONFIG.display.addedDirsLayout,
     showContextBar: typeof migrated.display?.showContextBar === 'boolean'
       ? migrated.display.showContextBar
       : DEFAULT_CONFIG.display.showContextBar,
@@ -641,9 +677,15 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     duration: validateColorValue(migrated.colors?.duration)
       ? migrated.colors.duration
       : DEFAULT_CONFIG.colors.duration,
+    barFilled: validateBarChar(migrated.colors?.barFilled)
+      ? migrated.colors.barFilled
+      : DEFAULT_CONFIG.colors.barFilled,
+    barEmpty: validateBarChar(migrated.colors?.barEmpty)
+      ? migrated.colors.barEmpty
+      : DEFAULT_CONFIG.colors.barEmpty,
   };
 
-  return { language, lineLayout, showSeparators, pathLevels, maxWidth, elementOrder, gitStatus, display, colors };
+  return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };
 }
 
 export async function loadConfig(): Promise<HudConfig> {

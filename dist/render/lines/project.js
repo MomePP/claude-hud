@@ -6,6 +6,7 @@ import { getOutputSpeed } from '../../speed-tracker.js';
 import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor } from '../colors.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
+import { normalizeAddedDirs, sanitize as sanitizeDisplayText, basenameOf, truncateBasename, MAX_RENDERED_ADDED_DIRS } from './added-dirs.js';
 function formatCompactCount(n) {
     if (n >= 1_000_000)
         return `${(n / 1_000_000).toFixed(1)}M`;
@@ -22,7 +23,6 @@ function formatLastRequestTokens(usage) {
     }
     return base;
 }
-const CONTROL_AND_BIDI_PATTERN = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u206A-\u206F]/g;
 function hyperlink(uri, text) {
     const esc = '\x1b';
     const st = '\\';
@@ -81,9 +81,6 @@ function buildExtras(ctx) {
     }
     return extras;
 }
-function sanitizeDisplayText(value) {
-    return value.replace(CONTROL_AND_BIDI_PATTERN, '');
-}
 function getFileHref(filePath) {
     try {
         return pathToFileURL(path.resolve(filePath)).toString();
@@ -124,7 +121,14 @@ function renderPipesProjectLine(ctx) {
     if (display?.showModel !== false) {
         const model = formatModelName(getModelName(ctx.stdin), display?.modelFormat, display?.modelOverride);
         const providerLabel = getProviderLabel(ctx.stdin);
-        const modelDisplay = providerLabel ? `${model} | ${providerLabel}` : model;
+        const modelQualifier = providerLabel ?? undefined;
+        let modelDisplay = modelQualifier ? `${model} | ${modelQualifier}` : model;
+        if (ctx.effortLevel && ctx.effortSymbol) {
+            modelDisplay += ` ${ctx.effortSymbol} ${ctx.effortLevel}`;
+        }
+        else if (ctx.effortLevel) {
+            modelDisplay += ` ${ctx.effortLevel}`;
+        }
         parts.push(modelColor(`[${modelDisplay}]`, colors));
     }
     let projectPart = null;
@@ -133,6 +137,22 @@ function renderPipesProjectLine(ctx) {
         if (projectPath) {
             projectPart = safeHyperlink(getFileHref(ctx.stdin.cwd), projectColor(projectPath, colors));
         }
+    }
+    let addedDirsPart = null;
+    const addedDirs = normalizeAddedDirs(ctx.stdin.workspace?.added_dirs);
+    const addedDirsLayout = display?.addedDirsLayout ?? 'inline';
+    if (display?.showAddedDirs !== false && addedDirsLayout === 'inline' && addedDirs.length > 0) {
+        const visible = addedDirs.slice(0, MAX_RENDERED_ADDED_DIRS);
+        const overflow = addedDirs.length - visible.length;
+        const rendered = visible.map((dir) => {
+            const name = truncateBasename(sanitizeDisplayText(basenameOf(dir)));
+            const text = dim(`+${name}`);
+            return safeHyperlink(getFileHref(dir), text);
+        });
+        if (overflow > 0) {
+            rendered.push(dim(`+${overflow} more`));
+        }
+        addedDirsPart = rendered.join(' ');
     }
     let gitPart = '';
     const gitConfig = ctx.config?.gitStatus;
@@ -156,17 +176,20 @@ function renderPipesProjectLine(ctx) {
         gitPart = `${gitColor('git:(', colors)}${gitInner.join(' ')}${gitColor(')', colors)}`;
     }
     const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
-    if (projectPart && gitPart) {
+    const projectWithDirs = projectPart && addedDirsPart
+        ? `${projectPart} ${addedDirsPart}`
+        : projectPart ?? addedDirsPart;
+    if (projectWithDirs && gitPart) {
         if (branchOverflow === 'wrap') {
-            parts.push(projectPart);
+            parts.push(projectWithDirs);
             parts.push(gitPart);
         }
         else {
-            parts.push(`${projectPart} ${gitPart}`);
+            parts.push(`${projectWithDirs} ${gitPart}`);
         }
     }
-    else if (projectPart) {
-        parts.push(projectPart);
+    else if (projectWithDirs) {
+        parts.push(projectWithDirs);
     }
     else if (gitPart) {
         parts.push(gitPart);

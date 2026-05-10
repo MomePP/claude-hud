@@ -136,6 +136,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
 | `maxWidth` | number \| `null` | `null` | Hard fallback width used only when terminal-width detection fails completely (tmux edge cases, weird TTYs). Inherited from upstream 0.1.0. |
+| `forceMaxWidth` | boolean | false | Always use `maxWidth` when it is set, even if terminal width detection returns a smaller value. Inherited from upstream. |
 | `elementOrder` | string[] | `["project","context","usage","promptCache","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
 | `gitStatus.enabled` | boolean | true | Show git branch in HUD |
 | `gitStatus.showDirty` | boolean | true | Show `*` for uncommitted changes |
@@ -146,6 +147,8 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `gitStatus.showFileList` | boolean | false | Show the bottom multi-line list of changed files (`~src/foo.ts(+5 -3)  +src/new.ts  ?2`). Independent of `showFileStats` so you can keep the inline counter without the bottom list. When unset, falls back to `showFileStats` for upstream compat. |
 | `gitStatus.branchOverflow` | `truncate` \| `wrap` | `truncate` | In **pipes** mode only, `wrap` lets a long branch name render on its own line (project + `git:(...)` become two parts joined by ` │ `). Inherited from upstream. |
 | `display.showModel` | boolean | true | Show model name `[Opus]` |
+| `display.showAddedDirs` | boolean | true | Show extra workspace directories from `/add-dir` (e.g. `+sparkle +lib-foo`); empty array renders nothing. In both layouts at most 5 dirs render (overflow shown as `+N more`) and basenames are truncated to 24 chars with `…` |
+| `display.addedDirsLayout` | `inline` \| `line` | `inline` | `inline` puts dirs next to the project name with a `+name` prefix per dir; `line` renders them on a separate `Added dirs: name1, name2` line (no `+` prefix, comma-separated) |
 | `display.showContextBar` | boolean | true | Show visual context bar `████░░░░░░` |
 | `display.contextValue` | `percent` \| `tokens` \| `remaining` \| `both` | `percent` | Context display format (`45%`, `45k/200k`, `55%` remaining, or `45% (45k/200k)`) |
 | `display.showConfigCounts` | boolean | false | Show CLAUDE.md, rules, MCPs, hooks counts |
@@ -198,6 +201,10 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `colors.custom` | color value | `208` | Color for the optional custom line |
 | `colors.thinking` | color value | `dim` | Color for the inline `∿ thinking` indicator (defaults to dim so it stays out of the way; override with any named color, 256-color number, or hex). |
 | `colors.duration` | color value | `dim` | Color for the session-duration extra (the `<glyph> 1h 30m` token). Independent of `colors.label` so you can keep `Context`/`Usage` labels dim while bumping the duration. |
+| `colors.barFilled` | string | `█` | Character used for the filled portion of progress bars. Overrides `display.barStyle`'s filled character when set. Inherited from upstream. |
+| `colors.barEmpty` | string | `░` | Character used for the empty portion of progress bars. Overrides `display.barStyle`'s empty character when set. Inherited from upstream. |
+
+`colors.barFilled` and `colors.barEmpty` accept a single visible grapheme. Control characters, invisible format characters (bidi controls, zero-width joiners, variation selectors), line/paragraph separators, and noncharacters are rejected. Wide characters (emoji, CJK) may affect bar alignment depending on the terminal.
 
 Supported color names: `dim`, `red`, `green`, `yellow`, `magenta`, `cyan`, `brightBlue`, `brightMagenta`. You can also use a 256-color number (`0-255`) or hex (`#rrggbb`).
 

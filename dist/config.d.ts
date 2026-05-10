@@ -15,7 +15,8 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
-export type HudElement = 'project' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
@@ -33,6 +34,8 @@ export interface HudColorOverrides {
     custom: HudColorValue;
     thinking: HudColorValue;
     duration: HudColorValue;
+    barFilled: string;
+    barEmpty: string;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
@@ -42,6 +45,7 @@ export interface HudConfig {
     showSeparators: boolean;
     pathLevels: 1 | 2 | 3;
     maxWidth: number | null;
+    forceMaxWidth: boolean;
     elementOrder: HudElement[];
     gitStatus: {
         enabled: boolean;
@@ -56,6 +60,8 @@ export interface HudConfig {
     display: {
         showModel: boolean;
         showProject: boolean;
+        showAddedDirs: boolean;
+        addedDirsLayout: AddedDirsLayout;
         showContextBar: boolean;
         contextValue: ContextValueMode;
         showConfigCounts: boolean;

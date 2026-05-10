@@ -8,6 +8,7 @@ import { renderTodosLine } from './todos-line.js';
 import {
   renderIdentityLine,
   renderProjectLine,
+  renderAddedDirsLine,
   renderGitFilesLine,
   renderEnvironmentLine,
   renderPromptCacheLine,
@@ -356,6 +357,8 @@ function renderElementLine(
   switch (element) {
     case 'project':
       return renderProjectLine(ctx);
+    case 'addedDirs':
+      return renderAddedDirsLine(ctx);
     case 'context':
       return renderIdentityLine(ctx, alignProgressLabels);
     case 'usage':
@@ -484,7 +487,10 @@ export function render(ctx: RenderContext): void {
   const lineLayout = ctx.config?.lineLayout ?? 'expanded';
   const showSeparators = ctx.config?.showSeparators ?? false;
   const detectedWidth = getTerminalWidth({ preferEnv: true, fallback: UNKNOWN_TERMINAL_WIDTH });
-  const terminalWidth = detectedWidth ?? ctx.config?.maxWidth ?? UNKNOWN_TERMINAL_WIDTH;
+  const configuredMaxWidth = ctx.config?.maxWidth ?? UNKNOWN_TERMINAL_WIDTH;
+  const terminalWidth = ctx.config?.forceMaxWidth && configuredMaxWidth !== UNKNOWN_TERMINAL_WIDTH
+    ? configuredMaxWidth
+    : (detectedWidth ?? configuredMaxWidth ?? UNKNOWN_TERMINAL_WIDTH);
 
   let lines: string[];
 
