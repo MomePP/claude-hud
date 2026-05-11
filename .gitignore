@@ -58,3 +58,4 @@ yarn.lock
 bun.lock
 .omc/
 .weave/
+.gitnexus
