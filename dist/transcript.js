@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
-const TRANSCRIPT_CACHE_VERSION = 3;
+const TRANSCRIPT_CACHE_VERSION = 4;
 // 4MB tail window: enough to catch the most recent ~80–130 agent calls and
 // tool results while bounding I/O. Ported from omc-hud. Files smaller than
 // this threshold are still fully streamed.
@@ -251,6 +251,7 @@ export async function parseTranscript(transcriptPath) {
     const pendingPermissionMap = new Map();
     let latestTodos = [];
     const taskIdToIndex = new Map();
+    const queueCompletionMap = new Map();
     let latestSlug;
     let customTitle;
     let lastCompactBoundaryAt;
@@ -306,6 +307,24 @@ export async function parseTranscript(transcriptPath) {
                     }
                 }
             }
+            // Background-agent completion via Claude Code's `queue-operation`
+            // enqueue events. Complements the `<task-notification>` path in
+            // processEntry — either signal is enough to mark a background agent
+            // completed, whichever arrives first. The queue-op timestamp is the
+            // accurate finish time (the tool_result was written at launch).
+            if (entry.type === 'queue-operation' && entry.operation === 'enqueue' && entry.content && entry.timestamp) {
+                const m = entry.content.match(/<tool-use-id>([^<]+)<\/tool-use-id>/);
+                if (m) {
+                    const queuedAgent = agentMap.get(m[1]);
+                    if (queuedAgent && queuedAgent.status === 'running') {
+                        const ts = new Date(entry.timestamp);
+                        if (!Number.isNaN(ts.getTime())) {
+                            queuedAgent.status = 'completed';
+                            queuedAgent.endTime = ts;
+                        }
+                    }
+                }
+            }
             // Track Claude Code's compact_boundary marker. Both manual (/compact)
             // and auto compaction emit this system entry with compactMetadata; we
             // take the most recent one's timestamp so callers can distinguish a
@@ -348,6 +367,21 @@ export async function parseTranscript(transcriptPath) {
     }
     catch {
         // Return partial results on error
+    }
+    // Resolve agent completion: prefer queue-operation timestamps (accurate for
+    // background agents), fall back to tool_result timestamps (inline agents).
+    // Status is deferred so background agents show ◐ until they truly finish.
+    for (const [toolUseId, endTime] of queueCompletionMap) {
+        const agent = agentMap.get(toolUseId);
+        if (agent?.background) {
+            agent.endTime = endTime;
+            agent.status = 'completed';
+        }
+    }
+    for (const agent of agentMap.values()) {
+        if (agent.status === 'running' && agent.endTime) {
+            agent.status = 'completed';
+        }
     }
     result.tools = Array.from(toolMap.values()).slice(-20);
     result.agents = Array.from(agentMap.values()).slice(-10);
@@ -477,6 +511,7 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
                     description: input?.description ?? undefined,
                     status: 'running',
                     startTime: timestamp,
+                    background: input?.run_in_background === true,
                 };
                 agentMap.set(block.id, agentEntry);
             }
@@ -563,12 +598,15 @@ function processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, resu
             }
             const agent = agentMap.get(block.tool_use_id);
             if (agent) {
-                // A run_in_background Agent completes asynchronously. Its initial
-                // tool_result just says "Async agent launched successfully" — the
-                // real completion arrives later as a `<task-notification>` block.
-                // Require the text to START WITH the phrase so we don't misclassify
-                // foreground results that happen to quote it.
-                if (isAsyncLaunchResult(block.content)) {
+                // A run_in_background Agent completes asynchronously. Primary signal
+                // is `agent.background` (set from the Task tool_use's
+                // `input.run_in_background` field — structural, robust to wording
+                // changes). Fallback: the legacy "Async agent launched successfully"
+                // tool_result prefix, kept so old transcripts without the input
+                // field still classify correctly. Real completion arrives later as
+                // a `<task-notification>` block or a `queue-operation` enqueue.
+                const isBackgroundLaunch = agent.background === true || isAsyncLaunchResult(block.content);
+                if (isBackgroundLaunch) {
                     const bgAgentId = extractBackgroundAgentId(block.content);
                     if (bgAgentId) {
                         backgroundAgentMap.set(bgAgentId, block.tool_use_id);

@@ -2,6 +2,7 @@ import type { Language } from './i18n/types.js';
 export type LineLayoutType = 'compact' | 'expanded';
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
+export type UsageValueMode = 'percent' | 'remaining';
 export type GitBranchOverflowMode = 'truncate' | 'wrap';
 /**
  * Controls how the model name is displayed in the HUD badge.
@@ -15,7 +16,7 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
-export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos' | 'sessionTime';
 export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -70,6 +71,7 @@ export interface HudConfig {
         showSpeed: boolean;
         showTokenBreakdown: boolean;
         showUsage: boolean;
+        usageValue: UsageValueMode;
         usageBarEnabled: boolean;
         showResetLabel: boolean;
         usageCompact: boolean;
@@ -87,6 +89,8 @@ export interface HudConfig {
         showThinkingIndicator: boolean;
         showPendingPermission: boolean;
         showLastRequestTokens: boolean;
+        showSessionStartDate: boolean;
+        showLastResponseAt: boolean;
         mergeGroups: HudElement[][];
         autocompactBuffer: AutocompactBufferMode;
         contextWarningThreshold: number;

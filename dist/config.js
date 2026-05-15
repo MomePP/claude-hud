@@ -13,6 +13,7 @@ export const DEFAULT_ELEMENT_ORDER = [
     'tools',
     'agents',
     'todos',
+    'sessionTime',
 ];
 export const DEFAULT_MERGE_GROUPS = [
     ['context', 'usage'],
@@ -49,6 +50,7 @@ export const DEFAULT_CONFIG = {
         showSpeed: false,
         showTokenBreakdown: true,
         showUsage: true,
+        usageValue: 'percent',
         usageBarEnabled: true,
         showResetLabel: true,
         usageCompact: false,
@@ -66,6 +68,8 @@ export const DEFAULT_CONFIG = {
         showThinkingIndicator: true,
         showPendingPermission: true,
         showLastRequestTokens: false,
+        showSessionStartDate: false,
+        showLastResponseAt: false,
         mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
         autocompactBuffer: 'enabled',
         contextWarningThreshold: 70,
@@ -122,6 +126,9 @@ function validateGitBranchOverflow(value) {
 }
 function validateContextValue(value) {
     return value === 'percent' || value === 'tokens' || value === 'remaining' || value === 'both';
+}
+function validateUsageValue(value) {
+    return value === 'percent' || value === 'remaining';
 }
 function validateLanguage(value) {
     return value === 'en' || value === 'zh';
@@ -371,6 +378,9 @@ export function mergeConfig(userConfig) {
         showUsage: typeof migrated.display?.showUsage === 'boolean'
             ? migrated.display.showUsage
             : DEFAULT_CONFIG.display.showUsage,
+        usageValue: validateUsageValue(migrated.display?.usageValue)
+            ? migrated.display.usageValue
+            : DEFAULT_CONFIG.display.usageValue,
         usageBarEnabled: typeof migrated.display?.usageBarEnabled === 'boolean'
             ? migrated.display.usageBarEnabled
             : DEFAULT_CONFIG.display.usageBarEnabled,
@@ -420,6 +430,12 @@ export function mergeConfig(userConfig) {
         showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
             ? migrated.display.showLastRequestTokens
             : DEFAULT_CONFIG.display.showLastRequestTokens,
+        showSessionStartDate: typeof migrated.display?.showSessionStartDate === 'boolean'
+            ? migrated.display.showSessionStartDate
+            : DEFAULT_CONFIG.display.showSessionStartDate,
+        showLastResponseAt: typeof migrated.display?.showLastResponseAt === 'boolean'
+            ? migrated.display.showLastResponseAt
+            : DEFAULT_CONFIG.display.showLastResponseAt,
         mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
         autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
             ? migrated.display.autocompactBuffer

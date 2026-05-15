@@ -8,6 +8,7 @@ export type LineLayoutType = 'compact' | 'expanded';
 
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
+export type UsageValueMode = 'percent' | 'remaining';
 export type GitBranchOverflowMode = 'truncate' | 'wrap';
 
 /**
@@ -22,7 +23,7 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both';
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
-export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos';
+export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos' | 'sessionTime';
 
 export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName =
@@ -67,6 +68,7 @@ export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
   'tools',
   'agents',
   'todos',
+  'sessionTime',
 ];
 
 export const DEFAULT_MERGE_GROUPS: HudElement[][] = [
@@ -106,6 +108,7 @@ export interface HudConfig {
     showSpeed: boolean;
     showTokenBreakdown: boolean;
     showUsage: boolean;
+    usageValue: UsageValueMode;
     usageBarEnabled: boolean;
     showResetLabel: boolean;
     usageCompact: boolean;
@@ -123,6 +126,8 @@ export interface HudConfig {
     showThinkingIndicator: boolean;
     showPendingPermission: boolean;
     showLastRequestTokens: boolean;
+    showSessionStartDate: boolean;
+    showLastResponseAt: boolean;
     mergeGroups: HudElement[][];
     autocompactBuffer: AutocompactBufferMode;
     contextWarningThreshold: number;
@@ -179,6 +184,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showSpeed: false,
     showTokenBreakdown: true,
     showUsage: true,
+    usageValue: 'percent',
     usageBarEnabled: true,
     showResetLabel: true,
     usageCompact: false,
@@ -196,6 +202,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     showThinkingIndicator: true,
     showPendingPermission: true,
     showLastRequestTokens: false,
+    showSessionStartDate: false,
+    showLastResponseAt: false,
     mergeGroups: DEFAULT_MERGE_GROUPS.map(group => [...group]),
     autocompactBuffer: 'enabled',
     contextWarningThreshold: 70,
@@ -258,6 +266,10 @@ function validateGitBranchOverflow(value: unknown): value is GitBranchOverflowMo
 
 function validateContextValue(value: unknown): value is ContextValueMode {
   return value === 'percent' || value === 'tokens' || value === 'remaining' || value === 'both';
+}
+
+function validateUsageValue(value: unknown): value is UsageValueMode {
+  return value === 'percent' || value === 'remaining';
 }
 
 function validateLanguage(value: unknown): value is Language {
@@ -531,6 +543,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showUsage: typeof migrated.display?.showUsage === 'boolean'
       ? migrated.display.showUsage
       : DEFAULT_CONFIG.display.showUsage,
+    usageValue: validateUsageValue(migrated.display?.usageValue)
+      ? migrated.display.usageValue
+      : DEFAULT_CONFIG.display.usageValue,
     usageBarEnabled: typeof migrated.display?.usageBarEnabled === 'boolean'
       ? migrated.display.usageBarEnabled
       : DEFAULT_CONFIG.display.usageBarEnabled,
@@ -580,6 +595,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
       ? migrated.display.showLastRequestTokens
       : DEFAULT_CONFIG.display.showLastRequestTokens,
+    showSessionStartDate: typeof migrated.display?.showSessionStartDate === 'boolean'
+      ? migrated.display.showSessionStartDate
+      : DEFAULT_CONFIG.display.showSessionStartDate,
+    showLastResponseAt: typeof migrated.display?.showLastResponseAt === 'boolean'
+      ? migrated.display.showLastResponseAt
+      : DEFAULT_CONFIG.display.showLastResponseAt,
     mergeGroups: validateMergeGroups(migrated.display?.mergeGroups),
     autocompactBuffer: validateAutocompactBuffer(migrated.display?.autocompactBuffer)
       ? migrated.display.autocompactBuffer

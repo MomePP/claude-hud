@@ -4,6 +4,32 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+Pulls 30 upstream commits since 0.4.0's sync point and lands a hybrid
+background-agent strategy that combines the fork's `<task-notification>`
+parsing (required by OAC's parallel-execution flow) with upstream's
+`queue-operation` enqueue-event completion.
+
+### Added (upstream sync — 30 commits)
+- `display.usageValue` (`percent` | `remaining`) — show quota left instead of quota used.
+- `balance_label` support on `display.externalUsagePath` snapshots — prepaid providers can surface their balance text (e.g. `¥6.35`) in the usage slot. Sanitized (strips ANSI/control/bidi, 50-char cap).
+- `display.showSessionStartDate` and `display.showLastResponseAt` — optional session-time line showing transcript start timestamp and "last reply N ago".
+- `sessionTime` HudElement appended to default `elementOrder` (opt-in — only renders when the flags above are set).
+- i18n keys for the session-time line (`label.sessionStarted`, `label.lastReply`, `format.ago`, `format.justNow`).
+- `AgentEntry.background` field populated from the Task tool's `input.run_in_background` flag.
+
+### Changed
+- **Hybrid background-agent tracking.** Detection is now structural (`input.run_in_background`) with the legacy `"Async agent launched"` tool_result prefix kept only as a fallback for older transcripts. Completion accepts either `<task-notification status="completed">` blocks (OAC compat) **or** `queue-operation` enqueue events (upstream's accurate finish-time signal) — whichever arrives first wins. See `src/transcript.ts:442` (queue-op watcher) and `src/transcript.ts:760` (hybrid detection).
+
+### Fixed (upstream sync)
+- `git status` paths with octal-escaped Unicode now render correctly (no more garbled non-ASCII filenames).
+- Stale transcript agent caches are invalidated on transcript truncation/rewrite.
+
+### Skipped
+- Upstream's Windows + PowerShell `/claude-hud:setup` wrapper, BOM guidance, and OSTYPE=msys routing — fork remains macOS/Linux only.
+- Upstream's required-string `colors.barFilled` / `colors.barEmpty` shape — fork keeps them **optional** so `display.barStyle` continues to drive bar characters by default (commit `4287e07`).
+- Upstream's removal of `colors.thinking` / `colors.duration` — fork keeps them as independent overrides for the inline `∿ thinking` glyph and the session-duration token.
+- Upstream's default-color changes (`model: cyan`, `project: yellow`, `gitBranch: cyan`) — fork keeps prior defaults (`green` / `cyan` / `brightMagenta`) to avoid re-theming every existing fork user.
+
 ## [0.4.0] - 2026-05-10 — MomePP fork (upstream sync — /add-dir, forceMaxWidth, bar char overrides)
 
 Pulls 30 upstream commits since 0.3.2's sync point, bringing in workspace

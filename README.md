@@ -12,13 +12,16 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 |---|---|
 | Displays `unknown` when an Agent tool call omits `subagent_type` | Falls back to the caller-supplied `name`, then `general-purpose` (the actual Claude Code default) |
 | Renders namespaced agent types raw — `oac:code-execution`, `oh-my-claudecode:explore` | Strips the `namespace:` prefix and capitalizes — shows as `Code-execution`, `Explore`. Configurable via `display.agentNamespaceMode`: `strip` (default), `badge` (`[oac] Code-execution` — keeps orchestrator visible), or `raw` (pass-through). Same formatting also applies to the `Skill` tool target so `Skill: oac:context-discovery` becomes `Skill: Context-discovery` (or `Skill: [oac] Context-discovery` in badge mode) |
-| Leaves background (`run_in_background`) agents stuck as "running" forever | Parses `<task-notification>` blocks to mark them completed (OAC's parallel-execution / oac:parallel-execution flow relies on this) |
+| Detects background agents only via the `input.run_in_background` flag, and completes them only when Claude Code emits a `queue-operation` enqueue event. Misses OAC's `<task-notification>` completion path entirely | **Hybrid background-agent tracking.** Detection: `input.run_in_background` is the primary signal (structural, robust to wording changes), with the legacy `"Async agent launched"` tool_result prefix kept as a fallback for old transcripts. Completion: accepts either `<task-notification status="completed">` blocks **or** `queue-operation` enqueue events — whichever arrives first wins, with the queue-op timestamp used for accurate finish time. The notification path keeps OAC's `oac:parallel-execution` flow working; the queue-op path matches upstream's accuracy gains |
 | Doesn't understand OMC's `proxy_Edit` / `proxy_Task` shim | Strips `proxy_` and routes them identically to native tools (OMC-only; OAC uses native tools and `Skill`, no proxy layer) |
 | Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long-OAC-orchestrator perf win) |
 | Cross-platform (darwin / linux / win32 / powershell) | **macOS/Linux only** — Windows branches removed from setup |
 | CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
 | Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships a launcher at `scripts/claude-hud.sh`; `settings.json` just points at it |
-| — | Thinking-state and pending-permission indicators on the project line |
+| — | Inline project-line indicators: thinking (`∿ thinking`), pending permission (`? target (waiting Ns)`), and last-request tokens (`last: 12k→678`, with `(+Xk)` when reasoning tokens are present) |
+| Dropped `colors.thinking` and `colors.duration` overrides — the inline thinking glyph and session-duration token now share the generic label color | Keeps `colors.thinking` and `colors.duration` as independent overrides so the `∿ thinking` glyph and the `<glyph> 1h 30m` duration token can be themed separately from `Context` / `Usage` labels |
+| `colors.barFilled` / `colors.barEmpty` are required strings — overriding either forces a custom character set even when `display.barStyle` is set, and dropping them from the config silently falls back to upstream defaults | `colors.barFilled?` / `colors.barEmpty?` are **optional** — when unset, `display.barStyle` controls bar characters end-to-end. Set either explicitly only for fine-grained per-character overrides without losing the style preset |
+| Default colors `model: cyan`, `project: yellow`, `gitBranch: cyan` (starship-aligned) | Keeps the earlier fork defaults `model: green`, `project: cyan`, `gitBranch: brightMagenta` — change-on-merge would re-theme every existing fork user's HUD, so they stay pinned |
 
 ## Limitations
 
@@ -137,7 +140,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
 | `maxWidth` | number \| `null` | `null` | Hard fallback width used only when terminal-width detection fails completely (tmux edge cases, weird TTYs). Inherited from upstream 0.1.0. |
 | `forceMaxWidth` | boolean | false | Always use `maxWidth` when it is set, even if terminal width detection returns a smaller value. Inherited from upstream. |
-| `elementOrder` | string[] | `["project","context","usage","promptCache","memory","environment","tools","agents","todos"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. |
+| `elementOrder` | string[] | `["project","context","usage","promptCache","memory","environment","tools","agents","todos","sessionTime"]` | Expanded-mode element order. Omit entries to hide them in expanded mode. `sessionTime` is opt-in via `showSessionStartDate` / `showLastResponseAt`. Existing configs keep their explicit order until updated. |
 | `gitStatus.enabled` | boolean | true | Show git branch in HUD |
 | `gitStatus.showDirty` | boolean | true | Show `*` for uncommitted changes |
 | `gitStatus.showAheadBehind` | boolean | false | Show `↑N ↓N` for ahead/behind remote |
@@ -157,6 +160,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showDuration` | boolean | false | Show session duration `⏱️ 5m` |
 | `display.showSpeed` | boolean | false | Show output token speed `out: 42.1 tok/s` |
 | `display.showUsage` | boolean | true | Show Claude subscriber usage limits when available |
+| `display.usageValue` | `percent` \| `remaining` | `percent` | Usage display format (`25%` used, or `75%` remaining) |
 | `display.usageBarEnabled` | boolean | true | Display usage as visual bar instead of text |
 | `display.sevenDayThreshold` | 0-100 | 80 | Show 7-day usage when >= threshold (0 = always) |
 | `display.contextWarningThreshold` | 0-100 | 70 | Context-bar percentage at which colours switch from `colors.context` to `colors.warning`. Inherited from upstream. |
@@ -168,6 +172,8 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.showAgents` | boolean | false | Show agents activity line |
 | `display.showTodos` | boolean | false | Show todos progress line |
 | `display.showSessionName` | boolean | false | Show session slug or custom title from `/rename` |
+| `display.showSessionStartDate` | boolean | false | Show the transcript session start timestamp |
+| `display.showLastResponseAt` | boolean | false | Show how long ago the last assistant response was written |
 | `display.showClaudeCodeVersion` | boolean | false | Show the installed Claude Code version, e.g. `CC v2.1.81` |
 | `display.showMemoryUsage` | boolean | false | Show an approximate system RAM usage line in expanded layout |
 | `display.showThinkingIndicator` | boolean | true | Inline `∿ thinking` glyph on the project line while extended thinking is active (30s decay window) |
@@ -232,6 +238,10 @@ Usage display is **enabled by default** when Claude Code provides subscriber `ra
 
 ClaudeHUD intentionally trusts only the official statusline stdin payload for live usage. It does not read local OAuth credentials or poll undocumented usage endpoints in the background.
 
+Set `display.usageValue` to `remaining` to show quota left instead of quota used. Warning colors and 7-day threshold checks still use the underlying used percentage.
+
+If you do opt into the local sidecar fallback by setting `display.externalUsagePath` (inherited from upstream), the snapshot must be fresh enough (`display.externalUsageFreshnessMs`) and include a valid `updated_at`, plus a `five_hour` window, `seven_day` window, or `balance_label`. `balance_label` is optional text for prepaid provider balances (e.g. `¥6.35`); it is trimmed, length-limited, and sanitized before display.
+
 Free/weekly-only accounts render the weekly window by itself instead of showing a ghost `5h: --` placeholder.
 
 The 7-day percentage appears when above the `display.sevenDayThreshold` (default 80%):
@@ -262,7 +272,7 @@ To disable, set `display.showUsage` to `false`.
   "language": "zh",
   "lineLayout": "expanded",
   "pathLevels": 2,
-  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "agents", "todos"],
+  "elementOrder": ["project", "tools", "context", "usage", "memory", "environment", "agents", "todos", "sessionTime"],
   "gitStatus": {
     "enabled": true,
     "showDirty": true,
