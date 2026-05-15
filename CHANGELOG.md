@@ -4,6 +4,98 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-15 — MomePP fork (perf: bundle dist + cache git status + lazy ICU segmenter)
+
+Fork-only performance / battery release — no upstream merge. The statusline is
+invoked every ~300ms by Claude Code as a fresh cold-start node process, so any
+per-tick work multiplies into roughly 12,000 invocations/hour. This release
+targets the three biggest steady-state CPU sinks identified by a focused audit
+of the entire project; each fix is invisible to users and preserves every
+fork-direction invariant.
+
+Measured impact on an M-series Mac: steady-state wall time per tick drops from
+**~60ms to ~30-40ms** (roughly half), measured with `/usr/bin/time -p` across
+5 cold-start runs each, before and after.
+
+Patch (not minor) because there are no new config keys, no new render
+elements, no behavior changes — only internal restructuring.
+
+### Changed — fork
+
+- **Bundle `dist/index.js` with esbuild** (`package.json:14`). The build now
+  runs `tsc` (still emitting all individual `dist/*.js` files so tests keep
+  deep-importing them) followed by `esbuild dist/index.js --bundle --minify
+  --keep-names --format=esm --target=node18` rewriting `dist/index.js` in
+  place to a single ~94 KB self-contained module. Eliminates ~38 separate
+  file open/parse/compile cycles per cold start, the single largest chunk of
+  per-tick wall time. Tests still resolve individual modules from `dist/`;
+  the launcher only loads `dist/index.js`. Source maps for `dist/index.js`
+  are dropped post-bundle since they'd reference dead pre-bundle code.
+
+- **Cache `getGitStatus` by `.git/` mtime sentinels** (`src/git.ts`). Previous
+  builds spawned up to 5 `git` child processes on every tick (rev-parse,
+  status, diff --numstat, rev-list, remote get-url) for ~15-40ms of fork /
+  exec / pipe overhead on dirty repos. Now keyed by stat of `.git/HEAD`,
+  `.git/index`, `.git/FETCH_HEAD`, `.git/ORIG_HEAD`, `.git/MERGE_HEAD`,
+  `.git/config`, and the cwd directory itself — covering branch switches,
+  stage operations, fetches, in-progress merges/rebases, remote URL edits,
+  and top-level untracked-file adds. Cache lives at
+  `<HudPluginDir>/git-cache/<sha256(cwd):16>.json`, mirroring the sentinel
+  pattern in `src/config-reader.ts`. Cold-miss path additionally parallelizes
+  the four independent git spawns via `Promise.allSettled` (was sequential
+  `await`), cutting cold-miss wall from ~30ms to ~max-of-parallel. Worktrees
+  (where `.git` is a file, not a dir) skip the cache and run uncached.
+
+- **Lazy `Intl.Segmenter` with ASCII fast-path** (`src/render/index.ts:28-39`,
+  `src/render/index.ts:73-91`, `src/config.ts:316-345`). Previous builds
+  constructed `Intl.Segmenter` at module load even when no non-ASCII text
+  would appear in the rendered line — ~2-4ms of ICU init per cold start.
+  Now: lazy singleton getter that only constructs the segmenter when called,
+  plus a `/^[\x00-\x7F]*$/` regex short-circuit in `segmentGraphemes` that
+  skips the segmenter entirely for pure-ASCII text (the common case —
+  model badges, percent labels, ASCII glyphs). CJK / emoji / combining-mark
+  paths are unchanged. `validateBarChar` in `src/config.ts` shares the same
+  lazy pattern via its own singleton.
+
+- **Parallelize cold-miss git spawns** (`src/git.ts:96-117`). `rev-parse`,
+  `status --porcelain`, `rev-list @{upstream}...HEAD`, and `remote get-url
+  origin` now run concurrently via `Promise.allSettled` rather than serially
+  via `await`. `diff --numstat HEAD` still runs sequentially after status
+  because it conditionally fires only when status reports a dirty tree, and
+  it needs the tracked-paths set from porcelain output.
+
+### Build / dev dependencies
+
+- **Added `esbuild ^0.28.0` as a devDependency.** Build-time only — runtime
+  is still pure node, the launcher just does `exec node "$entry"` where
+  `$entry` is the bundled `dist/index.js`. No runtime dependency change.
+
+### Default-behavior changes visible on update
+
+None. Every change is internal: same render output, same config schema, same
+launcher path, same fork-direction invariants. Existing user configs work
+unchanged. The git-status cache may surface a 1-tick (~300ms) lag for
+untracked files created in deeply-nested subdirectories of cwd — top-level
+untracked-file changes still tick the cwd sentinel and refresh immediately.
+
+### Tests
+
+632 passing / 1 skipped / 0 failing. The fork-specific `tests/transcript-omc.test.js`
+still validates `<task-notification>` parsing, hybrid background-agent
+completion (run_in_background flag + queue-operation + tool_result fallback),
+and the 4MB tail-read path. `tests/git.test.js` (22 tests) validates the
+rewritten `getGitStatus` — every test uses a fresh temp-dir cwd so the cache
+is naturally cold-miss, exercising the recompute path. Bundled `dist/index.js`
+is exercised by `tests/index.test.js` which imports `formatSessionDuration`
+and `main` from the bundle and relies on `main`'s dependency-injection
+overrides for module-boundary stubs — unaffected by bundling.
+
+### Bumped
+
+- `package.json` → `0.4.2`
+- `.claude-plugin/plugin.json` → `0.4.2`
+- `.claude-plugin/marketplace.json` → `metadata.version: 0.4.2`
+
 ## [0.4.1] - 2026-05-15 — MomePP fork (upstream sync — session-time, balance_label, usage remaining; hybrid background-agent tracking)
 
 Pulls 30 upstream commits since 0.4.0's sync point. The headline change is a

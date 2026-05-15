@@ -25,9 +25,20 @@ import { codePointCellWidth, isCjkAmbiguousWide } from './width.js';
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_GLOBAL = /(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
-const GRAPHEME_SEGMENTER = typeof Intl.Segmenter === 'function'
-  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-  : null;
+// ICU Segmenter init is ~2-4ms on cold start. Build lazily so ASCII-only
+// renders never pay the cost.
+let _graphemeSegmenter: Intl.Segmenter | null | undefined;
+function getGraphemeSegmenter(): Intl.Segmenter | null {
+  if (_graphemeSegmenter !== undefined) {
+    return _graphemeSegmenter;
+  }
+  _graphemeSegmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+  return _graphemeSegmenter;
+}
+// eslint-disable-next-line no-control-regex
+const ASCII_ONLY = /^[\x00-\x7F]*$/;
 
 function stripAnsi(str: string): string {
   return str.replace(ANSI_ESCAPE_GLOBAL, '');
@@ -64,10 +75,16 @@ function segmentGraphemes(text: string): string[] {
   if (!text) {
     return [];
   }
-  if (!GRAPHEME_SEGMENTER) {
+  // ASCII fast-path: avoid constructing Intl.Segmenter for pure-ASCII text
+  // (every char is its own grapheme cluster). Saves ~2-4ms per cold start.
+  if (ASCII_ONLY.test(text)) {
     return Array.from(text);
   }
-  return Array.from(GRAPHEME_SEGMENTER.segment(text), segment => segment.segment);
+  const segmenter = getGraphemeSegmenter();
+  if (!segmenter) {
+    return Array.from(text);
+  }
+  return Array.from(segmenter.segment(text), segment => segment.segment);
 }
 
 function graphemeWidth(grapheme: string, ambiguousWide: boolean): number {

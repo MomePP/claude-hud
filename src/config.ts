@@ -315,11 +315,29 @@ function validateColorName(value: unknown): value is HudColorName {
 
 const UNSAFE_CODEPOINT = /[\p{Cc}\p{Cf}\p{Variation_Selector}\p{Zl}\p{Zp}\p{Cn}]/u;
 
+// Lazy singleton — see src/render/index.ts. validateBarChar is called from
+// loadConfig on every tick; eagerly constructing Intl.Segmenter at module
+// load wastes ~2ms when no override is set.
+let _barCharSegmenter: Intl.Segmenter | null | undefined;
+function getBarCharSegmenter(): Intl.Segmenter | null {
+  if (_barCharSegmenter !== undefined) {
+    return _barCharSegmenter;
+  }
+  _barCharSegmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+  return _barCharSegmenter;
+}
+
 function validateBarChar(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0) return false;
 
-  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-  if (Array.from(segmenter.segment(value)).length !== 1) return false;
+  const segmenter = getBarCharSegmenter();
+  if (segmenter) {
+    if (Array.from(segmenter.segment(value)).length !== 1) return false;
+  } else if (Array.from(value).length !== 1) {
+    return false;
+  }
 
   for (const ch of value) {
     if (UNSAFE_CODEPOINT.test(ch)) return false;
