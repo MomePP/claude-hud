@@ -6,31 +6,115 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [0.4.1] - 2026-05-15 — MomePP fork (upstream sync — session-time, balance_label, usage remaining; hybrid background-agent tracking)
 
-Pulls 30 upstream commits since 0.4.0's sync point and lands a hybrid
-background-agent strategy that combines the fork's `<task-notification>`
-parsing (required by OAC's parallel-execution flow) with upstream's
-`queue-operation` enqueue-event completion.
+Pulls 30 upstream commits since 0.4.0's sync point. The headline change is a
+**hybrid background-agent strategy**: structural detection via
+`input.run_in_background`, plus first-wins completion from either fork's
+`<task-notification>` parser (required by OAC's `oac:parallel-execution`
+flow) or upstream's new `queue-operation` enqueue events (the source of
+upstream's accuracy gains). Brittle string-prefix detection is now only a
+fallback for older transcripts. Stayed on `0.4.1` (not `0.5.0`) because the
+upstream additions are all opt-in or behind existing flags — no visible
+default behavior change on update.
 
-### Added (upstream sync — 30 commits)
-- `display.usageValue` (`percent` | `remaining`) — show quota left instead of quota used.
-- `balance_label` support on `display.externalUsagePath` snapshots — prepaid providers can surface their balance text (e.g. `¥6.35`) in the usage slot. Sanitized (strips ANSI/control/bidi, 50-char cap).
-- `display.showSessionStartDate` and `display.showLastResponseAt` — optional session-time line showing transcript start timestamp and "last reply N ago".
-- `sessionTime` HudElement appended to default `elementOrder` (opt-in — only renders when the flags above are set).
-- i18n keys for the session-time line (`label.sessionStarted`, `label.lastReply`, `format.ago`, `format.justNow`).
-- `AgentEntry.background` field populated from the Task tool's `input.run_in_background` flag.
+### Added — from upstream
+- **`display.usageValue`** (`percent` | `remaining`, default `percent`).
+  Show quota left instead of quota used (`75% remaining` vs `25%`).
+  Warning colors and the 7-day threshold check still run on the
+  underlying used percentage.
+- **`balance_label` on `display.externalUsagePath` snapshots.**
+  Prepaid third-party providers can surface their balance text
+  (e.g. `¥6.35`) directly in the usage slot. Sanitized at parse
+  time — strips ANSI / control / bidi-format sequences, capped at
+  50 graphemes (`src/external-usage.ts`).
+- **Session-time line.** New `display.showSessionStartDate` and
+  `display.showLastResponseAt` flags, new `sessionTime` HudElement,
+  new `src/render/lines/session-time.ts`. Shows transcript start
+  timestamp and a relative `Last reply: 2m ago`.
+- **i18n keys for the session-time line**: `label.sessionStarted`,
+  `label.lastReply`, `format.ago`, `format.justNow` (en + zh).
+- **`AgentEntry.background`** field — set from the Task tool's
+  `input.run_in_background` field. Structural background-agent
+  detection, no string sniffing.
+- **`git status` unicode path fix.** Octal-escaped paths emitted by
+  `git status -z` now decode correctly (`src/git.ts`); non-ASCII
+  filenames no longer render as garbled bytes.
+- **Stale transcript cache invalidation.** When the underlying
+  transcript file is truncated / rewritten, the cached parse result
+  is dropped instead of returning stale agent state.
+- **Dep**: `@types/node` 25.6.0 → 25.6.2.
 
-### Changed
-- **Hybrid background-agent tracking.** Detection is now structural (`input.run_in_background`) with the legacy `"Async agent launched"` tool_result prefix kept only as a fallback for older transcripts. Completion accepts either `<task-notification status="completed">` blocks (OAC compat) **or** `queue-operation` enqueue events (upstream's accurate finish-time signal) — whichever arrives first wins. See `src/transcript.ts:442` (queue-op watcher) and `src/transcript.ts:760` (hybrid detection).
+### Changed — fork
+- **Hybrid background-agent tracking** (`src/transcript.ts`).
+  Detection sets `agent.background = (input.run_in_background ===
+  true)` at Task tool_use time, with the legacy `"Async agent
+  launched"` tool_result prefix kept as an OR-fallback for older
+  transcripts where the input field is missing. Completion accepts
+  any of three signals — `<task-notification status="completed">`
+  blocks (OAC compat), `queue-operation` enqueue events (upstream's
+  accurate finish timestamp), or — for foreground agents — the
+  tool_result timestamp. First-wins; once `status` flips to
+  `completed`, subsequent signals are ignored. See line ~442
+  (queue-op watcher) and ~760 (tool_result handler) in
+  `src/transcript.ts`.
 
-### Fixed (upstream sync)
-- `git status` paths with octal-escaped Unicode now render correctly (no more garbled non-ASCII filenames).
-- Stale transcript agent caches are invalidated on transcript truncation/rewrite.
+### Conflict resolutions (kept fork features intact)
+- `src/config.ts` — kept `colors.thinking` / `colors.duration` and
+  optional `colors.barFilled?` / `colors.barEmpty?` (per 0.4.0).
+  Added upstream's `UsageValueMode`, `showSessionStartDate`,
+  `showLastResponseAt`, and appended `sessionTime` to
+  `DEFAULT_ELEMENT_ORDER`.
+- `src/transcript.ts` — preserved fork's permission-prompt tracker,
+  thinking state, last-request token tracker, `<task-notification>`
+  parser, 4MB tail-read path, and `compact_boundary` tracking.
+  Layered upstream's queue-operation watcher on top.
+- `commands/setup.md` — kept fork's launcher-based setup wholesale
+  (`--ours`). Discarded upstream's Windows PowerShell wrapper /
+  OSTYPE=msys routing / BOM guidance.
+- `README.md` / `CHANGELOG.md` — kept fork branding and "Why this
+  fork exists" table; updated rows for hybrid background tracking,
+  the three project-line indicators (thinking, pending permission,
+  last-request tokens), preserved `colors.thinking` /
+  `colors.duration`, and optional bar chars. Added new rows for the
+  divergent default colors.
 
-### Skipped
-- Upstream's Windows + PowerShell `/claude-hud:setup` wrapper, BOM guidance, and OSTYPE=msys routing — fork remains macOS/Linux only.
-- Upstream's required-string `colors.barFilled` / `colors.barEmpty` shape — fork keeps them **optional** so `display.barStyle` continues to drive bar characters by default (commit `4287e07`).
-- Upstream's removal of `colors.thinking` / `colors.duration` — fork keeps them as independent overrides for the inline `∿ thinking` glyph and the session-duration token.
-- Upstream's default-color changes (`model: cyan`, `project: yellow`, `gitBranch: cyan`) — fork keeps prior defaults (`green` / `cyan` / `brightMagenta`) to avoid re-theming every existing fork user.
+### Skipped (per fork direction)
+- **Windows + PowerShell `/claude-hud:setup` wrapper, BOM guidance,
+  and OSTYPE=msys routing.** Fork is macOS/Linux only.
+- **Upstream's required-string `colors.barFilled` / `colors.barEmpty`
+  shape.** Fork keeps them optional so `display.barStyle` keeps
+  driving bar characters by default (commit `4287e07`).
+- **Upstream's removal of `colors.thinking` / `colors.duration`.**
+  Fork keeps them independent so the `∿ thinking` glyph and the
+  session-duration token can be themed separately from labels.
+- **Upstream's default-color changes** (`model: cyan`, `project:
+  yellow`, `gitBranch: cyan`). Fork keeps prior defaults (`green` /
+  `cyan` / `brightMagenta`) — change-on-merge would re-theme every
+  existing fork user.
+
+### Default-behavior changes visible on update
+- `sessionTime` appended to `DEFAULT_ELEMENT_ORDER`. It's opt-in —
+  only renders when `showSessionStartDate` or `showLastResponseAt`
+  is set. Existing configs with explicit `elementOrder` are
+  unaffected (they keep their order; add `"sessionTime"` to opt in).
+- Background-agent completion is now more accurate for vanilla
+  Claude Code background agents. Previous fork builds required a
+  `<task-notification>` to mark them done; 0.4.1 also accepts the
+  `queue-operation` event, so durations no longer hang at the
+  launch timestamp when Claude Code emits the event.
+
+### Tests
+- 632 / 0 fail / 1 skipped on the merged tree.
+- Fork-specific suites (`project-indicators.test.js`,
+  `transcript-omc.test.js`, `mcp-tool-name.test.js`,
+  `render-width.test.js`) still green.
+- Restored 3 upstream tests in `tests/core.test.js` that codify
+  queue-operation behavior — all pass under the hybrid (the fork
+  had stubbed them out during the merge; reinstating them once the
+  hybrid landed gives us both regression vectors covered).
+
+### Bumped
+- `package.json`, `.claude-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json` → 0.4.1.
 
 ## [0.4.0] - 2026-05-10 — MomePP fork (upstream sync — /add-dir, forceMaxWidth, bar char overrides)
 
