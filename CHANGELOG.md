@@ -4,6 +4,8 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-15 — MomePP fork (upstream sync — session-time, balance_label, usage remaining; hybrid background-agent tracking)
+
 Pulls 30 upstream commits since 0.4.0's sync point and lands a hybrid
 background-agent strategy that combines the fork's `<task-notification>`
 parsing (required by OAC's parallel-execution flow) with upstream's
