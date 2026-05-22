@@ -291,20 +291,61 @@ Run the generated command. It should produce output (the HUD lines) within a few
 
 ## Step 2.5: Detect Existing Statusline and Create Backup
 
-Before writing to `settings.json`, check whether a `statusLine` key already exists and protect the user's current configuration.
+Before writing to `settings.json`, check whether a `statusLine` key already exists and protect the user's current configuration. This covers the existing-statusLine overwrite issue tracked in [#547](https://github.com/jarrodwatts/claude-hud/issues/547).
 
 ### 2.5.1: Read the existing statusLine
 
 **macOS/Linux**:
 ```bash
 SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-EXISTING_COMMAND=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+EXISTING_COMMAND=""
+EXISTING_COMMAND_PREVIEW=""
+
+if [ -f "$SETTINGS" ]; then
+  EXISTING_COMMAND=$("{RUNTIME_PATH}" -e '
+const fs = require("fs");
+const settingsPath = process.argv[1];
+
+try {
+  const text = fs.readFileSync(settingsPath, "utf8");
+  if (text.trim() === "") process.exit(0);
+
+  const json = JSON.parse(text);
+  const command = json && json.statusLine && typeof json.statusLine.command === "string"
+    ? json.statusLine.command
+    : "";
+  process.stdout.write(command);
+} catch (error) {
+  console.error("Unable to read statusLine.command from settings.json: " + error.message);
+  process.exit(1);
+}
+' "$SETTINGS") || exit 1
+
+  EXISTING_COMMAND_PREVIEW=$(printf '%s' "$EXISTING_COMMAND" | "{RUNTIME_PATH}" -e '
+let value = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", chunk => { value += chunk; });
+process.stdin.on("end", () => {
+  const redacted = value
+    .replace(/\b(Bearer)\s+["\x27]?[^"\x27\s]+/gi, "$1 [REDACTED]")
+    .replace(/\b(Authorization\s*:\s*)["\x27]?[^"\x27\s]+/gi, "$1[REDACTED]")
+    .replace(/\b(token|api[_-]?key|secret|password|pass|auth)(=|:)\s*["\x27]?[^"\x27\s]+/gi, "$1$2[REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "sk-[REDACTED]")
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{8,}\b/g, "[GITHUB_TOKEN_REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  process.stdout.write(redacted.length > 160 ? redacted.slice(0, 157) + "..." : redacted);
+});
+')
+fi
 ```
 
 **Windows (PowerShell)**:
 ```powershell
 $settingsPath = if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR "settings.json" } else { Join-Path $HOME ".claude\settings.json" }
 $existingCommand = ""
+$existingCommandPreview = ""
 if (Test-Path $settingsPath) {
   try {
     $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
@@ -312,7 +353,22 @@ if (Test-Path $settingsPath) {
       $existingCommand = $json.statusLine.command
     }
   } catch {
-    # Invalid JSON - will be caught in Step 3
+    Write-Error "Unable to read statusLine.command from settings.json: $($_.Exception.Message)"
+    throw
+  }
+
+  if ($existingCommand -ne "") {
+    $existingCommandPreview = $existingCommand `
+      -replace "(?i)\b(Bearer)\s+[`"']?[^`"'\s]+", '$1 [REDACTED]' `
+      -replace "(?i)\b(Authorization\s*:\s*)[`"']?[^`"'\s]+", '$1[REDACTED]' `
+      -replace "(?i)\b(token|api[_-]?key|secret|password|pass|auth)(=|:)\s*[`"']?[^`"'\s]+", '$1$2[REDACTED]' `
+      -replace "\bsk-[A-Za-z0-9_-]{8,}\b", 'sk-[REDACTED]' `
+      -replace "\bgh[pousr]_[A-Za-z0-9_]{8,}\b", '[GITHUB_TOKEN_REDACTED]' `
+      -replace "\s+", " "
+    $existingCommandPreview = $existingCommandPreview.Trim()
+    if ($existingCommandPreview.Length -gt 160) {
+      $existingCommandPreview = $existingCommandPreview.Substring(0, 157) + "..."
+    }
   }
 }
 ```
@@ -337,18 +393,26 @@ If `EXISTING_COMMAND` / `$existingCommand` is non-empty, classify it:
 **macOS/Linux**:
 ```bash
 SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP_PATH=""
 if [ -f "$SETTINGS" ]; then
-  cp "$SETTINGS" "${SETTINGS}.bak.$(date +%Y%m%d-%H%M%S)"
-  echo "Backup created: ${SETTINGS}.bak.$(date +%Y%m%d-%H%M%S)"
+  BACKUP_PATH="${SETTINGS}.bak.${BACKUP_TIMESTAMP}"
+  if cp "$SETTINGS" "$BACKUP_PATH"; then
+    echo "Backup created: $BACKUP_PATH"
+  else
+    echo "Failed to create backup at: $BACKUP_PATH" >&2
+    exit 1
+  fi
 fi
 ```
 
 **Windows (PowerShell)**:
 ```powershell
+$backupPath = ""
 if (Test-Path $settingsPath) {
   $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $backupPath = "${settingsPath}.bak.${timestamp}"
-  Copy-Item $settingsPath $backupPath
+  Copy-Item $settingsPath $backupPath -ErrorAction Stop
   Write-Host "Backup created: $backupPath"
 }
 ```
@@ -363,15 +427,17 @@ if (Test-Path $settingsPath) {
 
 Use AskUserQuestion:
 - header: "Existing statusline detected"
-- question: "Found an existing statusLine in settings.json:\n\n  command: {EXISTING_COMMAND}\n  source: {SOURCE_LABEL}\n\nWhat would you like to do?"
+- question: "Found an existing statusLine in settings.json:\n\n  command preview: {REDACTED_COMMAND_PREVIEW}\n  source: {SOURCE_LABEL}\n\nWhat would you like to do?"
 - options:
   - "Replace it with claude-hud (your current setup will be backed up)"
-  - "Keep my current statusline and exit setup"
-  - "Cancel (no changes)"
+  - "Keep my current statusline and exit setup (settings stay unchanged)"
+  - "Cancel setup without changing settings"
 
-**If the user chooses "Keep" or "Cancel"**: Stop setup. The backup from 2.5.3 is still available but no changes are made to `settings.json`. Tell the user:
+Set `{REDACTED_COMMAND_PREVIEW}` to `EXISTING_COMMAND_PREVIEW` on macOS/Linux or `$existingCommandPreview` on Windows. Use only the redacted/truncated preview in the prompt and normal output. Do not print the full previous command because it may contain tokens or secrets.
 
-> No changes were made to your settings. Your existing statusline is preserved. The backup is at `{SETTINGS}.bak.{timestamp}` if you need it.
+**If the user chooses "Keep" or "Cancel"**: Stop setup. The backup from 2.5.3 is still available if one was created. Tell the user:
+
+> No changes were made to your settings. Your existing statusline is preserved. Setup created no settings mutation apart from the backup file at `{BACKUP_PATH or $backupPath}` if that value is set.
 
 **If the user chooses "Replace"**: Proceed to Step 3. The backup from 2.5.3 ensures the previous configuration can be restored.
 
@@ -383,7 +449,20 @@ Store the previous `statusLine.command` value in a file alongside the settings b
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 if [ -n "$EXISTING_COMMAND" ]; then
-  echo "$EXISTING_COMMAND" > "$CLAUDE_DIR/plugins/claude-hud/previous-statusline.txt"
+  PREVIOUS_COMMAND_DIR="$CLAUDE_DIR/plugins/claude-hud"
+  PREVIOUS_COMMAND_PATH="$PREVIOUS_COMMAND_DIR/previous-statusline.txt"
+  mkdir -p "$PREVIOUS_COMMAND_DIR"
+  chmod 700 "$PREVIOUS_COMMAND_DIR" 2>/dev/null || true
+  if (
+    umask 077
+    printf '%s' "$EXISTING_COMMAND" > "$PREVIOUS_COMMAND_PATH"
+  ); then
+    chmod 600 "$PREVIOUS_COMMAND_PATH" 2>/dev/null || true
+    echo "Previous statusline command saved to: $PREVIOUS_COMMAND_PATH"
+  else
+    echo "Failed to save previous statusline command to: $PREVIOUS_COMMAND_PATH" >&2
+    exit 1
+  fi
 fi
 ```
 
@@ -447,7 +526,7 @@ After successfully writing the config, tell the user:
 
 **Note**: The generated command dynamically finds and runs the latest installed plugin version. Updates are automatic - no need to re-run setup after plugin updates. If the HUD suddenly stops working, re-run `/claude-hud:setup` to verify the plugin is still installed.
 
-**Restoring a previous statusline**: If the user previously had a different statusline and wants to restore it, the backup is at `settings.json.bak.{timestamp}` and the previous command is stored in `~/.claude/plugins/claude-hud/previous-statusline.txt`. To restore:
+**Restoring a previous statusline**: If the user previously had a different statusline and wants to restore it, use the backup path printed in Step 2.5.3. The previous command is stored in `~/.claude/plugins/claude-hud/previous-statusline.txt`. To restore:
 1. Find the most recent backup: `ls -t ~/.claude/settings.json.bak.* | head -1`
 2. Copy it back: `cp ~/.claude/settings.json.bak.{timestamp} ~/.claude/settings.json`
 3. Restart Claude Code.
