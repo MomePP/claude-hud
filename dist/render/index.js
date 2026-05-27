@@ -11,8 +11,10 @@ import { codePointCellWidth, isCjkAmbiguousWide } from './width.js';
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_GLOBAL = /(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
-// ICU Segmenter init is ~2-4ms on cold start. Build lazily so ASCII-only
-// renders never pay the cost.
+// The first Intl.Segmenter construction triggers ICU grapheme-data init —
+// measured ~6ms in a fresh process (varies ~5-8ms by machine/Node/ICU). Since
+// the statusline is a fresh process every ~300ms, build the segmenter lazily
+// and take an ASCII fast-path so the common ASCII-only render never pays it.
 let _graphemeSegmenter;
 function getGraphemeSegmenter() {
     if (_graphemeSegmenter !== undefined) {

@@ -317,7 +317,7 @@ const UNSAFE_CODEPOINT = /[\p{Cc}\p{Cf}\p{Variation_Selector}\p{Zl}\p{Zp}\p{Cn}]
 
 // Lazy singleton — see src/render/index.ts. validateBarChar is called from
 // loadConfig on every tick; eagerly constructing Intl.Segmenter at module
-// load wastes ~2ms when no override is set.
+// load would waste the first-construction ICU init (~6ms) when no override is set.
 let _barCharSegmenter: Intl.Segmenter | null | undefined;
 function getBarCharSegmenter(): Intl.Segmenter | null {
   if (_barCharSegmenter !== undefined) {
