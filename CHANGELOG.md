@@ -4,6 +4,16 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — fork
+
+- **stdin cwd resilience** (`src/stdin.ts`) — the parser now falls back to
+  `workspace.current_dir` when the payload has no top-level `cwd`. Claude Code
+  currently sends top-level `cwd`, so behavior is unchanged today; this keeps
+  project name / git / config counts / OMC state resolving if a future Claude
+  Code version moves cwd solely under `workspace`. Normalized once at the parse
+  chokepoint so every consumer benefits. Top-level `cwd` still wins when both
+  are present.
+
 ## [0.5.0] - 2026-05-27 — MomePP fork (OMC re-focus + integration; re-add multi-platform/Windows)
 
 Two themes. **(1) Re-focus OAC → OMC**: oh-my-claudecode is now the fork's primary
