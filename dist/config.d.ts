@@ -13,6 +13,9 @@ export type GitBranchOverflowMode = 'truncate' | 'wrap';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
 export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'agents' | 'todos' | 'sessionTime';
 export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
@@ -30,8 +33,10 @@ export interface HudColorOverrides {
     gitBranch: HudColorValue;
     label: HudColorValue;
     custom: HudColorValue;
-    barFilled: string;
-    barEmpty: string;
+    thinking: HudColorValue;
+    duration: HudColorValue;
+    barFilled?: string;
+    barEmpty?: string;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
@@ -48,6 +53,7 @@ export interface HudConfig {
         showDirty: boolean;
         showAheadBehind: boolean;
         showFileStats: boolean;
+        showFileList: boolean;
         branchOverflow: GitBranchOverflowMode;
         pushWarningThreshold: number;
         pushCriticalThreshold: number;
@@ -80,6 +86,9 @@ export interface HudConfig {
         promptCacheTtlSeconds: number;
         showSessionTokens: boolean;
         showOutputStyle: boolean;
+        showThinkingIndicator: boolean;
+        showPendingPermission: boolean;
+        showLastRequestTokens: boolean;
         showSessionStartDate: boolean;
         showLastResponseAt: boolean;
         mergeGroups: HudElement[][];
@@ -95,6 +104,14 @@ export interface HudConfig {
         modelOverride: string;
         customLine: string;
         timeFormat: TimeFormatMode;
+        projectStyle: ProjectStyleMode;
+        naturalSeparator: string;
+        modelGlyph: string;
+        projectGlyph: string;
+        branchGlyph: string;
+        durationGlyph: string;
+        barStyle: BarStyleMode;
+        agentNamespaceMode: AgentNamespaceMode;
     };
     colors: HudColorOverrides;
 }

@@ -1,7 +1,9 @@
 import { yellow, green, cyan, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 export function renderToolsLine(ctx) {
     const { tools } = ctx.transcript;
     const colors = ctx.config?.colors;
+    const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
     if (tools.length === 0) {
         return null;
     }
@@ -9,13 +11,14 @@ export function renderToolsLine(ctx) {
     const runningTools = tools.filter((t) => t.status === 'running');
     const completedTools = tools.filter((t) => t.status === 'completed' || t.status === 'error');
     for (const tool of runningTools.slice(-2)) {
-        const target = tool.target ? truncatePath(tool.target) : '';
-        parts.push(`${yellow('◐')} ${cyan(tool.name)}${target ? label(`: ${target}`, colors) : ''}`);
+        const target = tool.target ? formatToolTarget(tool.name, tool.target, namespaceMode) : '';
+        parts.push(`${yellow('◐')} ${cyan(formatToolName(tool.name))}${target ? label(`: ${target}`, colors) : ''}`);
     }
     const toolCounts = new Map();
     for (const tool of completedTools) {
-        const count = toolCounts.get(tool.name) ?? 0;
-        toolCounts.set(tool.name, count + 1);
+        const displayName = formatToolName(tool.name);
+        const count = toolCounts.get(displayName) ?? 0;
+        toolCounts.set(displayName, count + 1);
     }
     const sortedTools = Array.from(toolCounts.entries())
         .sort((a, b) => b[1] - a[1])
@@ -27,6 +30,47 @@ export function renderToolsLine(ctx) {
         return null;
     }
     return parts.join(' | ');
+}
+// Claude Code MCP tool names arrive in two shapes:
+//   mcp__<server>__<fn>                       — standard MCP server
+//   mcp__plugin_<plugin>_<server>__<fn>       — plugin-provided MCP server
+// Both balloon the tools line. Compress to `<scope>:<fn>` where <scope> is
+// the plugin name when present (more recognizable to users — "claude-mem",
+// "context-mode", "oh-my-claudecode") and the raw server name otherwise.
+// Non-MCP tool names pass through unchanged.
+export function formatToolName(raw) {
+    if (!raw.startsWith('mcp__'))
+        return raw;
+    const rest = raw.slice('mcp__'.length);
+    const splitAt = rest.indexOf('__');
+    if (splitAt < 0)
+        return raw;
+    const header = rest.slice(0, splitAt);
+    const fn = rest.slice(splitAt + 2);
+    if (!fn)
+        return raw;
+    let scope;
+    if (header.startsWith('plugin_')) {
+        const segs = header.split('_').filter(Boolean);
+        // plugin_<plugin>_<server> — prefer the plugin identifier (segs[1]).
+        scope = segs[1] ?? header;
+    }
+    else {
+        scope = header;
+    }
+    return `${scope}:${fn}`;
+}
+// The `Skill` tool's target is the skill identifier, which arrives as a
+// namespaced slug (`oac:context-discovery`, `caveman:cavecrew`). Apply the
+// same namespace formatting we use for agent types so `Skill: Context-discovery`
+// (strip) or `Skill: [oac] Context-discovery` (badge) lands on the tools line
+// instead of the raw slug. All other tool targets render through `truncatePath`
+// unchanged — they're file paths, not identifiers.
+export function formatToolTarget(toolName, rawTarget, namespaceMode) {
+    if (toolName === 'Skill') {
+        return formatNamespaced(rawTarget, namespaceMode);
+    }
+    return truncatePath(rawTarget);
 }
 function truncatePath(path, maxLen = 20) {
     // Normalize Windows backslashes to forward slashes for consistent display

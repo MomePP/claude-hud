@@ -103,6 +103,20 @@ export interface SessionTokenUsage {
     cacheCreationTokens: number;
     cacheReadTokens: number;
 }
+export interface LastRequestTokenUsage {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens?: number;
+}
+export interface ThinkingState {
+    active: boolean;
+    lastSeen: Date;
+}
+export interface PendingPermission {
+    toolName: string;
+    targetSummary: string;
+    timestamp: Date;
+}
 export interface TranscriptData {
     tools: ToolEntry[];
     agents: AgentEntry[];
@@ -111,6 +125,9 @@ export interface TranscriptData {
     sessionName?: string;
     lastAssistantResponseAt?: Date;
     sessionTokens?: SessionTokenUsage;
+    lastRequestTokenUsage?: LastRequestTokenUsage;
+    thinkingState?: ThinkingState;
+    pendingPermission?: PendingPermission;
     lastCompactBoundaryAt?: Date;
     lastCompactPostTokens?: number;
 }
