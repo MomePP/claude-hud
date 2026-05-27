@@ -128,7 +128,7 @@ Note: `statusLine` is NOT a valid plugin.json field. It must be configured in se
 
 ## Merging from Upstream
 
-This is a personal fork of `jarrodwatts/claude-hud`. Upstream syncs land regularly — follow this process and the merge stays predictable.
+This is a personal fork of `jarrodwatts/claude-hud`. Upstream syncs land regularly — the fork is **rebased/reconstructed onto the current upstream base** (not merged), so `main` stays linear and upstream-rooted instead of carrying both lineages. Follow this process and the sync stays predictable.
 
 ### Fork direction (non-negotiable)
 
@@ -141,9 +141,9 @@ These constraints decide every conflict resolution. If an upstream change violat
 - **`colors.thinking` and `colors.duration` stay** as independent overrides. Upstream periodically tries to consolidate them into `colors.label`; refuse.
 - **Hybrid background-agent tracking stays whole.** See "Background-agent invariant" below.
 
-### Fork features that must survive every merge
+### Fork features that must survive every sync
 
-If `git status` shows any of these as modified by upstream's hunks, the merge is preserving fork features incorrectly — re-check:
+If `git diff` against the pre-rebase backup shows any of these as modified, the sync is preserving fork features incorrectly — re-check:
 
 | Feature | Where it lives | Notes |
 |---|---|---|
@@ -168,34 +168,46 @@ Detection sets `agent.background = (input.run_in_background === true)`. The lega
 
 Whichever completion signal arrives first wins (`status === 'running'` guard). If upstream changes either path, keep both intact.
 
-### The merge procedure
+### The sync procedure (rebase-reconstruct)
 
-1. **Stash dirty working tree** — only commit the merge resolution, not in-progress work.
-2. **Create a sync branch**: `git checkout -b sync/upstream-YYYY-MM`.
-3. **Merge with `--no-commit --no-ff`**: `git merge upstream/main --no-commit --no-ff`. The `--no-ff` makes the merge commit explicit even when fast-forward would work.
-4. **Resolve conflicts in this order** — easy first, hard last:
+The fork is **rebased/reconstructed onto the current upstream base** — upstream is the root, fork patches sit cleanly on top, history stays linear. Do **not** land a `git merge` commit on `main`: a merge fuses both lineages and forces the repo to carry upstream's history interleaved with the fork's. A plain `git rebase upstream/main` is also wrong here — the fork lead contains its own merge commits + release/`dist`/chore noise, so a literal rebase replays ~19 commits over throwaway history. Instead, **use a merge only to compute the correct combined tree, then flatten that verified tree onto `upstream/main` as one linear commit.** (This is the same method as the v0.2.0 `fec5cbe`/`108de54` re-baseline and the 2026-05 sync `d9206cb` onto upstream `be9902a`.)
+
+1. **Pre-flight.** Clean working tree (stash in-progress work). `git fetch upstream`. Delete any contaminated `v0.1.*` tags (see hygiene below). **Create a backup branch**: `git branch backup/pre-rebase-YYYY-MM-DD main` — this is the rollback point and preserves the pre-rebase line (force-push will rewrite `main`).
+2. **Compute the tree (mechanism only, throwaway branch).** `git checkout -B work/merge-compute main`, then `git merge upstream/main --no-commit --no-ff`. Git auto-merges the non-overlapping majority and surfaces only the real overlaps — that's the point. This merge commit is *never* shipped; it only gives a correct 3-way tree.
+3. **Resolve conflicts** — easy first, hard last:
    1. `commands/setup.md` → `git checkout --ours` (fork's macOS-only launcher).
-   2. `README.md` / `CHANGELOG.md` → keep fork branding; add new upstream option rows; document any rejected upstream changes.
-   3. `src/config.ts` → take fork side for `colors.thinking` / `colors.duration` / optional bar chars / default colors; take upstream side for new modes/flags (e.g. `UsageValueMode`, `showSessionStartDate`).
-   4. `src/transcript.ts` → the hardest. Verify all three completion signals still wired; restore `compact_boundary` tracking, `handleLine` wrapper, fork's extended `processEntry` signature; **add** upstream's new watchers (e.g. `queue-operation`) rather than replacing fork paths.
-   5. `dist/*` → `git checkout --theirs` then `npm run build` (regen authoritative output; never hand-merge generated maps).
-5. **Verify auto-merged files** preserve fork features. `git diff` each one mentally against the "must survive" table.
-6. **Run `npm run build && npm test`**. Both must be clean. If upstream tests assert behavior the fork explicitly rejects (e.g. queue-op-only background completion), either:
-   - Adapt the fork's code to satisfy the test (when the test is exercising a real correctness invariant), or
-   - Delete the test with a comment explaining the divergence (when it's codifying upstream's chosen implementation strategy that contradicts fork direction).
-7. **Commit the merge** with body listing what was Added / Changed / Skipped. Then run the release skill for the version bump.
+   2. `README.md` / `CHANGELOG.md` → keep fork branding; add new upstream option rows; document rejected upstream changes.
+   3. `src/config.ts` → fork side for `colors.thinking` / `colors.duration` / optional bar chars / default color pins; upstream side for new modes/flags (e.g. `UsageValueMode`, language validators).
+   4. `src/transcript.ts` → the hardest, because the fork restructured the parse loop into a `handleLine` closure. Don't reconcile interleaved markers by hand: **`git checkout --ours src/transcript.ts`, then graft upstream's new logic in surgically** (adapt to the closure, don't copy-paste the upstream diff). Verify all three background-completion signals stay wired and `compact_boundary` tracking survives. Bump `TRANSCRIPT_CACHE_VERSION` whenever parse semantics change.
+   5. `dist/*` → don't hand-merge. After all source is resolved, `rm -rf dist && npm run build` (a clean rebuild prunes stale orphans, e.g. a renamed `src/i18n/zh.ts`→`zh-Hans.ts` leaves dead `dist/i18n/zh.*`), then `git add -A dist`.
+4. **Reject fork-direction violations.** Confirm `.github/workflows/*` and `.github/dependabot.yml` are absent from the index; reconcile `package-lock.json` with `npm install` (a merge can leave the lockfile's `version` stale vs `package.json`).
+5. **Verify (gates).** All must pass before flattening:
+   - `npm run build` clean; committed `dist/` reproduces from a fresh build with no diff.
+   - `npm test` clean. Upstream's new tests come along — if one codifies behavior the fork rejects, adapt the fork's code to satisfy a real correctness invariant, or delete the test with a comment explaining the divergence.
+   - `git diff backup/pre-rebase-YYYY-MM-DD --stat -- src/` shows **only** the intended upstream-driven files; every fork-feature file from the "must survive" table is byte-identical (`git diff --quiet <backup> -- <file>`).
+   - Runtime smoke test (`echo '{…}' | node dist/index.js`) + a review pass on any hand-authored resolution (don't self-approve in the same context — use `code-reviewer`/`verifier`).
+6. **Flatten onto the upstream base.** Capture the verified tree and re-parent it on `upstream/main` as a single linear commit — byte-identical tree, one parent, no merge:
+   ```bash
+   git commit -F msg.txt                         # commit the throwaway merge to capture the tree
+   TREE=$(git rev-parse HEAD^{tree})
+   NEW=$(git commit-tree $TREE -p upstream/main -F msg.txt)
+   git checkout main && git reset --hard $NEW     # main = upstream + one fork commit
+   git branch -D work/merge-compute
+   ```
+   Verify `git rev-list --parents -n1 HEAD` shows exactly two SHAs (commit + the upstream parent) — a single-parent linear commit, not a merge.
+7. **Release + push.** Run the release skill for the version bump / CHANGELOG / tag, then force-push (see hygiene — re-baselining `main` requires it).
 
 ### Upstream-tag hygiene
 
 Three guards keep upstream tags out of the fork's release flow — verify all three after any clone or after `git fetch` behavior changes:
 
 1. **`git config --get remote.upstream.tagOpt`** must return `--no-tags`. If it doesn't: `git config remote.upstream.tagOpt --no-tags`. Without this, `git fetch upstream` re-pulls every upstream tag.
-2. **Never push with `--follow-tags`.** Push the branch and the new fork tag explicitly:
+2. **Force-push `main` with `--force-with-lease`, never `--follow-tags`.** Re-baselining rewrites `main`'s history, so the push *is* a force-push — use `--force-with-lease` so an unexpected remote update aborts the push instead of clobbering it. Push the new fork tag explicitly:
    ```bash
-   git push origin main
+   git push --force-with-lease origin main
    git push origin v0.x.y
    ```
-   `--follow-tags` ships every annotated tag reachable from the commits being pushed — including upstream tags that came along on a previous `git fetch upstream`. Pushing an upstream tag re-triggers GitHub Actions on the tag's *target commit*, which still has `release.yml` in its tree even though `main` does not.
+   Never `--follow-tags`: it ships every annotated tag reachable from the pushed commits — including upstream tags that came along on a previous `git fetch upstream`. Pushing an upstream tag re-triggers GitHub Actions on the tag's *target commit*, which still has `release.yml` in its tree even though `main` does not.
 3. **Sweep after every merge**: `git tag --list 'v0.0.*' 'v0.1.*'` should return empty. The fork's first own-release tag was `v0.2.0`; anything below that is upstream contamination. Delete with `git tag -d <tag>`.
 
 ### See also

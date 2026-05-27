@@ -28,7 +28,7 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 - **macOS / Linux only.** No Windows support — setup.md and CI paths for `win32` / PowerShell were removed. The source still tolerates `process.platform === 'win32'` incidentally (for case-insensitive path compares), but nothing is tested there.
 - **No automated CI.** Tests and builds run locally. Dependency bumps won't be auto-gated; you're on your own to verify.
 - **Remember to rebuild.** `dist/` is tracked — run `npm run build` before committing source changes so the shipped bundle stays in sync.
-- **Upstream drift.** I cherry-pick upstream changes occasionally; this is not a live mirror.
+- **Upstream drift.** Not a live mirror. The fork is periodically **rebased onto the current upstream base** — upstream as the root, fork patches replayed cleanly on top, linear history — rather than merged (which would leave `main` carrying both lineages). Most recently synced to upstream [`be9902a`](https://github.com/jarrodwatts/claude-hud) (2026-05), adopting its session-token dedup, BCP-47 language tags (`zh`→`zh-Hans`), and OSC 8 truncation fix. See `CLAUDE.md` → "Merging from Upstream" for the procedure.
 
 ## Install
 
