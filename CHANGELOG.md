@@ -4,6 +4,12 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-27 — MomePP fork (stdin cwd resilience hardening)
+
+Patch: resilience-only hardening — **no user-visible change today** (current
+Claude Code sends a top-level `cwd`). Guards against a future Claude Code that
+might move cwd solely under `workspace`.
+
 ### Changed — fork
 
 - **stdin cwd resilience** (`src/stdin.ts`) — the parser now falls back to
@@ -13,6 +19,17 @@ All notable changes to Claude HUD will be documented in this file.
   Code version moves cwd solely under `workspace`. Normalized once at the parse
   chokepoint so every consumer benefits. Top-level `cwd` still wins when both
   are present.
+
+### Tests
+
+657 tests, all pass, 0 skipped. Added 2 `stdin` cases: `workspace.current_dir`
+fallback when top-level `cwd` is absent, and top-level `cwd` precedence.
+
+### Bumped
+
+- `package.json` → `0.5.1`
+- `.claude-plugin/plugin.json` → `0.5.1`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.5.1`
 
 ## [0.5.0] - 2026-05-27 — MomePP fork (OMC re-focus + integration; re-add multi-platform/Windows)
 
