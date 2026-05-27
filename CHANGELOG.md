@@ -4,6 +4,101 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-26 — MomePP fork (upstream sync: session-usage dedup, canonical i18n, OSC 8 truncation)
+
+Upstream sync adopting the 6 commits `a5b2d6e..be9902a`, applied as a
+**rebase-reconstruct** rather than a merge: the fork was rebuilt on top of the
+current `upstream/main` so `main` stays linear and upstream-rooted instead of
+carrying both lineages (see `CLAUDE.md` → "Merging from Upstream"). The merge
+engine was used only to compute the combined tree; the result was then flattened
+onto `upstream/main` (`be9902a`) as a single linear commit.
+
+Patch (not minor): no new fork config keys, render elements, or flipped
+defaults. The one user-visible effect is more-accurate (lower) session-token
+counts from the upstream dedup fix — a correctness bugfix, not a feature.
+
+### Added — from upstream
+
+- **Adjacent session-usage dedup** (`src/transcript.ts`) — Claude Code dual-logs
+  each API response 2-3× consecutively, inflating session token totals ~2.3×.
+  Consecutive entries with an identical usage signature now count once.
+- **BCP-47 canonical language tags** (`src/i18n/index.ts`) — `getCanonicalLanguage()`
+  / `isCjkLanguage()`; `zh` resolves to `zh-Hans`. `src/i18n/zh.ts` renamed to
+  `src/i18n/zh-Hans.ts`. Validator now accepts `en` / `zh` / `zh-Hans` (`zh`
+  kept as a back-compat alias). `src/render/width.ts` uses `isCjkLanguage()`
+  instead of a hardcoded `=== 'zh'`.
+- **Close OSC 8 hyperlink on truncation** (`src/render/index.ts`) — `closeOpenHyperlink()`
+  emits the OSC 8 terminator when a truncation cuts inside an open hyperlink, so
+  the link's underline stops at the ellipsis (most visible in `renderGitFilesLine`).
+- **`@types/node` → `^25.8.0`** (dev dependency).
+- **Docs** — Chinese README sync; `commands/configure.md` saves `zh-Hans`.
+
+### Changed — fork
+
+- **Reconstructed onto upstream base.** `main` is now `upstream/main` (`be9902a`)
+  plus the fork delta as linear commits — no merge commit. This is the documented
+  sync method going forward (replaces the prior merge doctrine in `CLAUDE.md`).
+- **Dedup adapted into the fork's `handleLine` closure** (`src/transcript.ts`),
+  not the vanilla loop upstream patched, so it covers both the streamed and the
+  4MB tail-read paths. `lastUsageKey` resets on blank lines, non-assistant
+  entries, assistant-without-usage, and parse errors; the `lastRequestTokenUsage`
+  snapshot stays outside the dedup guard (idempotent under duplicates).
+  `TRANSCRIPT_CACHE_VERSION` bumped 4 → 5 to invalidate stale inflated caches.
+- **Corrected lazy-segmenter cost comments** (`src/render/index.ts`, `src/config.ts`).
+  Benchmarked the first `Intl.Segmenter` construction in a fresh process at ~6ms
+  (ICU grapheme-data init), not the "~2-4ms" previously documented — the lazy
+  build + ASCII fast-path is worth more than the old comment implied.
+- **`CLAUDE.md` / `README.md`** updated to document the rebase-reconstruct sync
+  method, `--force-with-lease` push hygiene, and the fork's current sync point.
+
+### Conflict resolutions (kept fork features intact)
+
+- **`src/transcript.ts`** — the only real source conflict. Resolved by taking the
+  fork side (`--ours`) and grafting upstream's dedup in surgically rather than
+  reconciling interleaved markers. All three background-completion signals
+  (`<task-notification>`, `queue-operation`, `tool_result`), `compact_boundary`
+  tracking, and the tail-read path verified intact.
+- **`src/config.ts`** — auto-merged; verified `validateLanguage` gained `zh-Hans`,
+  default color pins (`model:green`/`project:cyan`/`gitBranch:brightMagenta`)
+  and optional `barFilled?`/`barEmpty?` survived.
+- **`src/i18n/index.ts`, `src/render/width.ts`, `src/render/index.ts`** —
+  auto-merged cleanly; OSC 8 close and the fork's lazy ICU segmenter coexist.
+- **`dist/*`** — clean rebuild (`rm -rf dist && npm run build`); pruned the stale
+  `dist/i18n/zh.*` orphans left by the `zh.ts` → `zh-Hans.ts` rename.
+- Verification: every one of the 13 fork-feature source files is **byte-identical**
+  to the pre-rebase backup (`git diff` confirmed); source delta is exactly the 7
+  upstream-driven files.
+
+### Skipped (per fork direction)
+
+- **`.github/workflows/*` and `.github/dependabot.yml`** — fork runs no CI.
+- Recurring fork-direction rejections still upheld: macOS/Linux only (no
+  Windows/PowerShell), `colors.barFilled?`/`colors.barEmpty?` stay optional,
+  `colors.thinking`/`colors.duration` stay independent, default colors pinned.
+
+### Default-behavior changes visible on update
+
+- **Session token counts drop to accurate values** — the dedup removes the ~2.3×
+  inflation, so the `Session` token figure will read lower than before (correct,
+  not a regression). Stale `v4` transcript caches are auto-invalidated.
+- `zh-Hans` is now the canonical Chinese tag; existing `language: "zh"` configs
+  keep working unchanged (aliased).
+
+### Tests
+
+644 tests, **643 pass, 0 fail, 1 skipped** (the Windows-cwd test, skipped by
+design on the macOS/Linux-only fork). Upstream's new assertions — adjacent-usage
+dedup (`core.test.js`), canonical i18n resolution (`i18n.test.js`), OSC 8
+truncation (`render-width.test.js`) — pass against the fork's adapted code. The
+fork-specific suites (`transcript-omc`, `project-indicators`, `mcp-tool-name`)
+remain green. Dedup adaptation passed a separate code-review gate.
+
+### Bumped
+
+- `package.json` → `0.4.3`
+- `.claude-plugin/plugin.json` → `0.4.3`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.4.3`
+
 ## [0.4.2] - 2026-05-15 — MomePP fork (perf: bundle dist + cache git status + lazy ICU segmenter)
 
 Fork-only performance / battery release — no upstream merge. The statusline is
