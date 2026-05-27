@@ -91,6 +91,8 @@ export const DEFAULT_CONFIG = {
         durationGlyph: '\uf017',
         barStyle: 'block',
         agentNamespaceMode: 'strip',
+        showOmcMode: true,
+        showOmcState: false,
     },
     colors: {
         context: 'green',
@@ -501,6 +503,12 @@ export function mergeConfig(userConfig) {
         agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
             ? migrated.display.agentNamespaceMode
             : DEFAULT_CONFIG.display.agentNamespaceMode,
+        showOmcMode: typeof migrated.display?.showOmcMode === 'boolean'
+            ? migrated.display.showOmcMode
+            : DEFAULT_CONFIG.display.showOmcMode,
+        showOmcState: typeof migrated.display?.showOmcState === 'boolean'
+            ? migrated.display.showOmcState
+            : DEFAULT_CONFIG.display.showOmcState,
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)

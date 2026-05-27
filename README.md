@@ -2,7 +2,7 @@
 
 A Claude Code plugin that shows what's happening — context usage, active tools, running agents, and todo progress. Always visible below your input.
 
-**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned primarily for [OpenAgentsControl](https://github.com/openagentscontrol/oac) (OAC) on Claude Code, with leftover compatibility for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC). If you're looking for the upstream, go there — this one is deliberately narrower in scope.
+**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned primarily for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC) on Claude Code — including OMC orchestration awareness (active-mode indicator, `.omc` mission state) — with leftover compatibility for [OpenAgentsControl](https://github.com/openagentscontrol/oac) (OAC). If you're looking for the upstream, go there — this one is deliberately narrower in scope.
 
 ![Claude HUD in action](claude-hud-preview-5-2.png)
 
@@ -15,9 +15,9 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 | Detects background agents only via the `input.run_in_background` flag, and completes them only when Claude Code emits a `queue-operation` enqueue event. Misses OAC's `<task-notification>` completion path entirely | **Hybrid background-agent tracking.** Detection: `input.run_in_background` is the primary signal (structural, robust to wording changes), with the legacy `"Async agent launched"` tool_result prefix kept as a fallback for old transcripts. Completion: accepts either `<task-notification status="completed">` blocks **or** `queue-operation` enqueue events — whichever arrives first wins, with the queue-op timestamp used for accurate finish time. The notification path keeps OAC's `oac:parallel-execution` flow working; the queue-op path matches upstream's accuracy gains |
 | Doesn't understand OMC's `proxy_Edit` / `proxy_Task` shim | Strips `proxy_` and routes them identically to native tools (OMC-only; OAC uses native tools and `Skill`, no proxy layer) |
 | Streams the whole transcript every ~300ms | Reads only the last 4MB for big sessions (long-OAC-orchestrator perf win) |
-| Cross-platform (darwin / linux / win32 / powershell) | **macOS/Linux only** — Windows branches removed from setup |
+| Cross-platform (darwin / linux / win32 / powershell), CI-tested | Cross-platform too, via **per-platform launcher scripts** (`.sh` for macOS/Linux/Git-Bash, `.ps1` for PowerShell) — but **Windows is experimental**: the maintainer develops on macOS/Linux and runs no CI, so Windows is best-effort and untested |
 | CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
-| Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships a launcher at `scripts/claude-hud.sh`; `settings.json` just points at it |
+| Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships launcher scripts (`scripts/claude-hud.sh`, `scripts/claude-hud.ps1`); `settings.json` just points at the one for your shell |
 | — | Inline project-line indicators: thinking (`∿ thinking`), pending permission (`? target (waiting Ns)`), and last-request tokens (`last: 12k→678`, with `(+Xk)` when reasoning tokens are present) |
 | Dropped `colors.thinking` and `colors.duration` overrides — the inline thinking glyph and session-duration token now share the generic label color | Keeps `colors.thinking` and `colors.duration` as independent overrides so the `∿ thinking` glyph and the `<glyph> 1h 30m` duration token can be themed separately from `Context` / `Usage` labels |
 | `colors.barFilled` / `colors.barEmpty` are required strings — overriding either forces a custom character set even when `display.barStyle` is set, and dropping them from the config silently falls back to upstream defaults | `colors.barFilled?` / `colors.barEmpty?` are **optional** — when unset, `display.barStyle` controls bar characters end-to-end. Set either explicitly only for fine-grained per-character overrides without losing the style preset |
@@ -25,7 +25,7 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 
 ## Limitations
 
-- **macOS / Linux only.** No Windows support — setup.md and CI paths for `win32` / PowerShell were removed. The source still tolerates `process.platform === 'win32'` incidentally (for case-insensitive path compares), but nothing is tested there.
+- **Windows is experimental.** As of 0.5.0 the fork ships a PowerShell launcher (`scripts/claude-hud.ps1`) and Windows setup instructions, and the runtime is cross-platform (path handling, `.cmd`/`.bat` version probing, etc.). But the maintainer develops on macOS/Linux and runs **no CI**, so Windows is untested and best-effort — report breakage via an issue. On Windows + Git Bash, use the `.sh` launcher.
 - **No automated CI.** Tests and builds run locally. Dependency bumps won't be auto-gated; you're on your own to verify.
 - **Remember to rebuild.** `dist/` is tracked — run `npm run build` before committing source changes so the shipped bundle stays in sync.
 - **Upstream drift.** Not a live mirror. The fork is periodically **rebased onto the current upstream base** — upstream as the root, fork patches replayed cleanly on top, linear history — rather than merged (which would leave `main` carrying both lineages). Most recently synced to upstream [`be9902a`](https://github.com/jarrodwatts/claude-hud) (2026-05), adopting its session-token dedup, BCP-47 language tags (`zh`→`zh-Hans`), and OSC 8 truncation fix. See `CLAUDE.md` → "Merging from Upstream" for the procedure.
@@ -193,7 +193,9 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.branchGlyph` | string (≤8 chars) | `` (Nerd Font git-branch `nf-dev-git_branch`, U+E725) | Glyph rendered between `on` and the branch name in `natural` project style. Set to `""` to disable. Try `` U+F126 FontAwesome code-branch as a more widely-supported fallback. |
 | `display.durationGlyph` | string (≤8 chars) | `` (Nerd Font clock `nf-fa-clock_o`, U+F017) | Glyph rendered before the session-duration value (replaces the legacy ⏱️ emoji). Applies to both `pipes` and `natural` modes. Set to `""` to drop the glyph entirely, or set to `⏱️ ` to keep the emoji. |
 | `display.barStyle` | `block` \| `square` \| `thin` \| `vertical` \| `dots` \| `shade` \| `double` | `block` | Character set for context, usage, and memory bars. `block` = `█░` (default, dense), `square` = `▰▱` (starship-like), `thin` = `━─` (minimal), `vertical` = `▮▯` (recognizable progress bars), `dots` = `●○` (distinctive), `shade` = `▓░` (soft gradient), `double` = `═─` (double-line tracks). |
-| `display.agentNamespaceMode` | `strip` \| `badge` \| `raw` | `strip` | How namespaced subagent types and `Skill` targets are rendered. `strip` drops the `<ns>:` prefix and capitalizes (`oac:debugger` → `Debugger`); `badge` keeps the namespace as a leading tag (`oac:debugger` → `[oac] Debugger`) — useful when running OAC and OMC in the same session; `raw` passes the slug through untouched. Applies to both the agents line and the `Skill` tool target on the tools line. |
+| `display.agentNamespaceMode` | `strip` \| `badge` \| `raw` | `strip` | How namespaced subagent types and `Skill` targets are rendered. `strip` drops the `<ns>:` prefix and capitalizes (`oh-my-claudecode:explore` → `Explore`); `badge` keeps the namespace as a leading tag, abbreviating `oh-my-claudecode` → `omc` (`oh-my-claudecode:explore` → `[omc] Explore`) — useful when running OMC and OAC in the same session; `raw` passes the slug through untouched. Applies to both the agents line and the `Skill` tool target on the tools line. |
+| `display.showOmcMode` | boolean | `true` | Show an inline OMC orchestration indicator on the project line (`⚙ <mode> 2/5`) when an oh-my-claudecode mission is active in `<cwd>/.omc/state/`. Shows the active mode (ralph / ultrawork / autopilot / team / …) and task progress. Renders nothing when no `.omc` mission is active. |
+| `display.showOmcState` | boolean | `false` | Opt-in extra line surfacing the current OMC mission: `◆ <mode>: <objective> (done/total) · N agents`, read from `<cwd>/.omc/state/`. Off by default. |
 | `colors.context` | color value | `green` | Base color for the context bar and context percentage |
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
@@ -371,7 +373,7 @@ node --test tests/transcript-omc.test.js
 ## Credit
 
 All of the HUD rendering, configuration flow, preset logic, and design choices come from
-[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of orchestrator-compat fixes (primarily for OAC on Claude Code, secondarily for OMC) and perf tweaks on top.
+[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of orchestrator-compat fixes (primarily for OMC on Claude Code, secondarily for OAC) and perf tweaks on top.
 
 ## License
 

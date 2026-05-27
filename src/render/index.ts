@@ -5,6 +5,7 @@ import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
+import { renderOmcStateLine } from './omc-line.js';
 import {
   renderIdentityLine,
   renderProjectLine,
@@ -384,6 +385,12 @@ function collectActivityLines(ctx: RenderContext): string[] {
     if (todosLine) {
       activityLines.push(todosLine);
     }
+  }
+
+  // Opt-in (default off); renderOmcStateLine self-gates on showOmcState + omcState.
+  const omcStateLine = renderOmcStateLine(ctx);
+  if (omcStateLine) {
+    activityLines.push(omcStateLine);
   }
 
   return activityLines;

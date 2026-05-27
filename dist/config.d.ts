@@ -112,6 +112,8 @@ export interface HudConfig {
         durationGlyph: string;
         barStyle: BarStyleMode;
         agentNamespaceMode: AgentNamespaceMode;
+        showOmcMode: boolean;
+        showOmcState: boolean;
     };
     colors: HudColorOverrides;
 }

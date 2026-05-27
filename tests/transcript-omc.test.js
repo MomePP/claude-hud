@@ -512,7 +512,8 @@ test('renderAgentsLine strips namespace and capitalizes for OMC subagents', () =
 
 test('formatNamespaced badge mode keeps the orchestrator visible', () => {
   assert.equal(formatNamespaced('oac:code-execution', 'badge'), '[oac] Code-execution');
-  assert.equal(formatNamespaced('oh-my-claudecode:explore', 'badge'), '[oh-my-claudecode] Explore');
+  // oh-my-claudecode is abbreviated to omc in badge mode (0.5.0 OMC focus).
+  assert.equal(formatNamespaced('oh-my-claudecode:explore', 'badge'), '[omc] Explore');
   // No namespace → behaves like strip (still capitalize).
   assert.equal(formatNamespaced('explore', 'badge'), 'Explore');
 });

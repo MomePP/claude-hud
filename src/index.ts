@@ -7,6 +7,7 @@ import { loadConfig } from "./config.js";
 import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
+import { readOmcState } from "./omc-state.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot } from "./external-usage.js";
@@ -29,6 +30,7 @@ export type MainDeps = {
   runExtraCmd: typeof runExtraCmd;
   getClaudeCodeVersion: typeof getClaudeCodeVersion;
   getMemoryUsage: typeof getMemoryUsage;
+  readOmcState: typeof readOmcState;
   applyContextWindowFallback: typeof applyContextWindowFallback;
   render: typeof render;
   now: () => number;
@@ -48,6 +50,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     runExtraCmd,
     getClaudeCodeVersion,
     getMemoryUsage,
+    readOmcState,
     applyContextWindowFallback,
     render,
     now: () => Date.now(),
@@ -113,6 +116,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? await deps.getMemoryUsage()
         : null;
 
+    const omcState = deps.readOmcState(stdin.cwd);
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -126,6 +131,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       memoryUsage,
       config,
       extraLabel,
+      omcState,
       outputStyle,
       claudeCodeVersion,
       effortLevel: effortInfo?.level,

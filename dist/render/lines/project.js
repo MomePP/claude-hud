@@ -68,6 +68,11 @@ function buildExtras(ctx) {
     if ((display?.showThinkingIndicator ?? true) && ctx.transcript.thinkingState?.active) {
         extras.push(thinkingColor('∿ thinking', colors));
     }
+    if ((display?.showOmcMode ?? true) && ctx.omcState?.active && ctx.omcState.mode) {
+        const { mode, taskCounts } = ctx.omcState;
+        const progress = taskCounts.total > 0 ? ` ${taskCounts.completed}/${taskCounts.total}` : '';
+        extras.push(dim(`⚙ ${sanitizeDisplayText(mode)}${progress}`));
+    }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
         const { targetSummary, timestamp } = ctx.transcript.pendingPermission;
         const waitingSecs = Math.max(0, Math.round((Date.now() - timestamp.getTime()) / 1000));

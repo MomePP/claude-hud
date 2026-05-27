@@ -5,14 +5,14 @@
     "url": "https://github.com/MomePP"
   },
   "metadata": {
-    "description": "Personal fork of claude-hud — OAC-tuned (Claude Code), OMC-compatible, darwin/linux only, built-in launcher script",
-    "version": "0.4.3"
+    "description": "Personal fork of claude-hud — OMC-tuned (oh-my-claudecode orchestration awareness), OAC-compatible, cross-platform (Windows experimental), built-in launcher scripts",
+    "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "claude-hud",
       "source": "./",
-      "description": "Real-time statusline for Claude Code, tuned for OpenAgentsControl (oac:* subagent rendering, hybrid background-agent completion via <task-notification> + queue-operation events) with leftover oh-my-claudecode compat (proxy_ tool routing). macOS/Linux only.",
+      "description": "Real-time statusline for Claude Code, tuned for oh-my-claudecode (OMC mode indicator + .omc mission state, proxy_ tool routing, omc: namespace rendering) with leftover OpenAgentsControl compat (oac:* rendering, <task-notification> background completion). Cross-platform, Windows experimental.",
       "category": "monitoring",
       "tags": ["hud", "statusline", "monitoring", "context", "tools", "agents", "todos", "oac", "openagentscontrol", "omc"]
     }

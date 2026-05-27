@@ -134,7 +134,7 @@ This is a personal fork of `jarrodwatts/claude-hud`. Upstream syncs land regular
 
 These constraints decide every conflict resolution. If an upstream change violates one of them, **reject the upstream side**:
 
-- **macOS / Linux only.** Drop all Windows / PowerShell / OSTYPE=msys hunks. `commands/setup.md` is fork-only (launcher-based via `scripts/claude-hud.sh`); `--ours` it wholesale on conflict.
+- **Multi-platform, but launcher-based setup is fork-only.** As of 0.5.0 the fork supports macOS / Linux / Windows (Windows is experimental — no CI, untested by the maintainer). The runtime is cross-platform; keep win32 path/`.cmd` handling. The divergence from upstream is the **setup + launcher**: the fork uses per-platform launcher scripts (`scripts/claude-hud.sh`, `scripts/claude-hud.ps1`) that `settings.json` points at, NOT upstream's inline dynamic one-liner. `commands/setup.md` is fork-only — `--ours` it wholesale on conflict, then port any genuinely new upstream platform-detection logic by hand.
 - **No CI workflows.** `.github/workflows/` does not exist on `main`. Never add files there from upstream.
 - **Default colors stay pinned**: `model: green`, `project: cyan`, `gitBranch: brightMagenta`. Upstream periodically re-themes; refuse.
 - **`colors.barFilled?` / `colors.barEmpty?` stay optional.** Upstream wants required strings; that breaks `display.barStyle`. Keep `string | undefined` shape with no default (commit `4287e07`).
@@ -152,9 +152,10 @@ If `git diff` against the pre-rebase backup shows any of these as modified, the 
 | Last-request token counter | `src/types.ts` (`LastRequestTokenUsage`) | Renders `last: 12k→678` |
 | 4MB tail-read path | `src/transcript.ts` (`MAX_TAIL_BYTES`, `readTailLines`, `handleLine` wrapper) | Perf for long OAC orchestrator sessions |
 | OMC `proxy_*` stripping | `src/render/tools-line.ts` etc. | OMC compat |
-| `display.agentNamespaceMode` | `src/config.ts`, `src/render/format-namespace.ts` | `strip` / `badge` / `raw` |
+| `display.agentNamespaceMode` | `src/config.ts`, `src/render/format-namespace.ts` | `strip` / `badge` / `raw`; badge abbreviates `oh-my-claudecode` → `omc` (`NAMESPACE_ABBR`) |
 | `display.projectStyle: 'natural'` | `src/render/lines/project.ts` (`renderNaturalProjectLine`) | Starship-style prose layout |
 | Hybrid background-agent tracking | `src/transcript.ts:442` (queue-op watcher), `src/transcript.ts:760` (tool_result handler) | See below |
+| OMC orchestration awareness | `src/omc-state.ts` (`readOmcState`), `src/render/omc-line.ts`, `src/render/lines/project.ts` (`buildExtras` indicator), `src/types.ts` (`omcState` on `RenderContext`), `src/index.ts` (wiring) | Reads `<cwd>/.omc/state/`; `display.showOmcMode` (default true) → `⚙ <mode> c/t`; `display.showOmcState` (default false) → opt-in `◆` mission line. Reader must never throw (runs every tick). |
 
 ### Background-agent invariant
 

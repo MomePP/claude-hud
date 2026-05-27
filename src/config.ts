@@ -149,6 +149,8 @@ export interface HudConfig {
     durationGlyph: string;
     barStyle: BarStyleMode;
     agentNamespaceMode: AgentNamespaceMode;
+    showOmcMode: boolean;
+    showOmcState: boolean;
   };
   colors: HudColorOverrides;
 }
@@ -225,6 +227,8 @@ export const DEFAULT_CONFIG: HudConfig = {
     durationGlyph: '\uf017',
     barStyle: 'block',
     agentNamespaceMode: 'strip',
+    showOmcMode: true,
+    showOmcState: false,
   },
   colors: {
     context: 'green',
@@ -672,6 +676,12 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
       ? migrated.display.agentNamespaceMode
       : DEFAULT_CONFIG.display.agentNamespaceMode,
+    showOmcMode: typeof migrated.display?.showOmcMode === 'boolean'
+      ? migrated.display.showOmcMode
+      : DEFAULT_CONFIG.display.showOmcMode,
+    showOmcState: typeof migrated.display?.showOmcState === 'boolean'
+      ? migrated.display.showOmcState
+      : DEFAULT_CONFIG.display.showOmcState,
   };
 
   const colors = {

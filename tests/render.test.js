@@ -320,11 +320,29 @@ test('renderSessionLine displays project name from POSIX cwd', () => {
   assert.ok(!line.includes('/Users/jarrod'));
 });
 
-test('renderSessionLine displays project name from Windows cwd', { skip: process.platform !== 'win32' }, () => {
+// Host-independent: the cwd split uses /[/\\]/, so Windows-style paths render
+// correctly on any platform. No win32 gate needed (previously skipped off-Windows).
+test('renderSessionLine displays project name from Windows cwd', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = 'C:\\Users\\jarrod\\my-project';
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('my-project'));
+  assert.ok(!line.includes('C:\\'));
+});
+
+test('renderSessionLine handles a deep Windows cwd (drive prefix dropped)', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'D:\\dev\\work\\acme-app';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('acme-app'));
+  assert.ok(!line.includes('D:\\'));
+});
+
+test('renderSessionLine handles a mixed-separator Windows cwd', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'C:\\Users\\dev/project-x';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('project-x'));
   assert.ok(!line.includes('C:\\'));
 });
 

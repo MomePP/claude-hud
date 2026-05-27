@@ -4,6 +4,106 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-27 — MomePP fork (OMC re-focus + integration; re-add multi-platform/Windows)
+
+Two themes. **(1) Re-focus OAC → OMC**: oh-my-claudecode is now the fork's primary
+target (OAC kept as leftover compat), and the HUD gains OMC orchestration awareness.
+**(2) Re-add multi-platform**, reversing the fork's long-standing "macOS / Linux only"
+direction. No upstream merge — this is a fork-only platform release. The runtime
+was already cross-platform (Windows `.cmd`/`.bat` version probing, `/[/\\]/` path
+splitting, win32 path-case handling — all already tested); what the fork had
+dropped was the **setup flow, the launcher, and the docs**, so that's what comes
+back.
+
+Minor bump (0.4.3 → 0.5.0): flips a documented fork direction (Windows) and adds
+new config keys (`showOmcMode`, `showOmcState`) plus an OMC re-focus users notice.
+
+**Windows is experimental and untested.** The maintainer develops on macOS/Linux
+and the fork runs no CI (that invariant is intentionally kept), so the Windows
+launcher and setup path are best-effort. macOS/Linux behavior is unchanged.
+
+### Added — fork
+
+- **OMC orchestration awareness** — new defensive reader `src/omc-state.ts` parses
+  `<cwd>/.omc/state/mission-state.json` + `subagent-tracking.json` (never throws;
+  runs every tick). Surfaces two features:
+  - **Mode indicator** (`display.showOmcMode`, default **true**): inline
+    `⚙ <mode> done/total` on the project line when an OMC mission is active
+    (ralph / ultrawork / autopilot / team / …). Hidden when no named mode is active.
+  - **`.omc` state line** (`display.showOmcState`, default **false**): opt-in
+    `◆ <mode>: <objective> (done/total) · N agents`.
+- **Namespace abbreviation** — badge mode renders `oh-my-claudecode` as `omc`
+  (`[omc] Explore` rather than `[oh-my-claudecode] Explore`); `src/render/format-namespace.ts`.
+- **PowerShell launcher** `scripts/claude-hud.ps1` — the Windows/PowerShell
+  counterpart to `scripts/claude-hud.sh`. Resolves the highest installed version
+  via `[version]` sort, caches the entry path in `.cached_hud_entry_ps` (separate
+  from the bash launcher's cache so Git-Bash and PowerShell sessions don't clash),
+  sets `$env:COLUMNS` from the console width, and hands off to `node`.
+- **Windows setup instructions** in `commands/setup.md` — PowerShell and
+  Windows-Git-Bash branches for locating the launcher, smoke-testing, and the
+  `settings.json` `statusLine` command (`powershell -NoProfile -ExecutionPolicy
+  Bypass -File ...`), plus `$OSTYPE` disambiguation (MSYS/Cygwin → use `.sh`).
+
+### Changed — fork
+
+- **Re-focused OAC → OMC** in `README.md`, `CLAUDE.md`, `.claude-plugin/plugin.json`,
+  and `.claude-plugin/marketplace.json`: OMC is now the primary target, OAC is
+  leftover compat. OAC code (the `<task-notification>` background-completion path,
+  `oac:` rendering) is unchanged and kept — the 3-signal background-agent invariant
+  still holds.
+- **Reversed the "macOS / Linux only" non-negotiable** in `CLAUDE.md` → Fork
+  direction: now multi-platform, with the launcher-based setup (not upstream's
+  inline one-liner) as the fork divergence.
+- **`README.md`** — "Why this fork exists" platform/launcher rows and the
+  Limitations section updated to describe experimental, launcher-based,
+  no-CI Windows support; added `display.showOmcMode` / `display.showOmcState`
+  to the options table.
+- **Windows hardening:** `src/memory.ts` now dispatches `win32` explicitly to the
+  `os.totalmem()`/`os.freemem()` reader (accurate on Windows — wraps
+  `GlobalMemoryStatusEx`, no win32-specific syscall needed). `scripts/claude-hud.ps1`
+  guards against a missing `node` on PATH (exits quietly instead of erroring into
+  the statusline). `commands/setup.md` gained ExecutionPolicy / `pwsh` / PATH
+  notes and a Windows debug step.
+
+### Skipped (scope boundaries for this release)
+
+- **`.ps1` launcher not executed.** The maintainer has no Windows machine and the
+  fork keeps no CI, so the PowerShell launcher and setup path are hardened by
+  review only, not run. Windows-behavior *logic* (path/cwd rendering, memory,
+  `.cmd`/`.bat` version probing) is unit-tested cross-platform on darwin.
+- **No CI.** The fork's no-CI invariant is kept, so Windows remains untested in
+  automation. (A `windows-latest` test job is the only way to gain real
+  confidence; intentionally not added.)
+- **Upstream's ghost-install cleanup flows and full `$OSTYPE`/MSYS matrix** were
+  not imported wholesale — only the launcher-relevant Windows branches.
+
+### Default-behavior changes visible on update
+
+- **OMC users:** the `⚙ <mode> done/total` indicator appears on the project line
+  when an OMC mission is active (`showOmcMode` defaults on). Non-OMC projects (no
+  `.omc/`) see no change — the reader returns null. Badge-mode namespaces show
+  `[omc]` instead of `[oh-my-claudecode]`.
+- **Launcher/config users: none.** The `.sh` launcher and `settings.json` command
+  are unchanged; existing configs keep working untouched.
+- **Windows users** gain an (experimental) supported setup path for the first
+  time since the fork began.
+
+### Tests
+
+655 tests, **655 pass, 0 fail, 0 skipped** on darwin (was 1 skipped). The
+`renderSessionLine displays project name from Windows cwd` test no longer gates
+on `win32` — the cwd split (`/[/\\]/`) is host-independent — and now runs
+everywhere, joined by deep / mixed-separator Windows-path cases and a Windows
+memory-path (`os.*`) computation test. OMC `tests/omc-state.test.js` (8 cases)
+covers the reader and the badge abbreviation. The `.ps1` launcher and PowerShell
+setup steps remain shell artifacts this darwin environment cannot execute.
+
+### Bumped
+
+- `package.json` → `0.5.0`
+- `.claude-plugin/plugin.json` → `0.5.0`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.5.0`
+
 ## [0.4.3] - 2026-05-26 — MomePP fork (upstream sync: session-usage dedup, canonical i18n, OSC 8 truncation)
 
 Upstream sync adopting the 6 commits `a5b2d6e..be9902a`, applied as a

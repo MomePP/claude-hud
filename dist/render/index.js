@@ -3,6 +3,7 @@ import { renderSessionLine } from './session-line.js';
 import { renderToolsLine } from './tools-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
+import { renderOmcStateLine } from './omc-line.js';
 import { renderIdentityLine, renderProjectLine, renderAddedDirsLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderSessionTimeLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
@@ -315,6 +316,11 @@ function collectActivityLines(ctx) {
         if (todosLine) {
             activityLines.push(todosLine);
         }
+    }
+    // Opt-in (default off); renderOmcStateLine self-gates on showOmcState + omcState.
+    const omcStateLine = renderOmcStateLine(ctx);
+    if (omcStateLine) {
+        activityLines.push(omcStateLine);
     }
     return activityLines;
 }

@@ -1,5 +1,6 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
+import type { OmcState } from './omc-state.js';
 export interface StdinData {
     transcript_path?: string;
     cwd?: string;
@@ -144,6 +145,7 @@ export interface RenderContext {
     memoryUsage: MemoryInfo | null;
     config: HudConfig;
     extraLabel: string | null;
+    omcState?: OmcState | null;
     outputStyle?: string;
     claudeCodeVersion?: string;
     effortLevel?: string;
