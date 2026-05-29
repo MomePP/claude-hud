@@ -51,6 +51,26 @@ test('readStdin parses valid JSON without waiting for EOF', async () => {
   });
 });
 
+test('readStdin falls back to workspace.current_dir when top-level cwd is absent', async () => {
+  const stream = createPipe();
+  const resultPromise = readStdin(stream, { firstByteTimeoutMs: 20, idleTimeoutMs: 10 });
+
+  stream.write('{"model":{"display_name":"Opus"},"workspace":{"current_dir":"/tmp/ws-project"}}');
+
+  const result = await resultPromise;
+  assert.equal(result.cwd, '/tmp/ws-project');
+});
+
+test('readStdin prefers a top-level cwd over workspace.current_dir', async () => {
+  const stream = createPipe();
+  const resultPromise = readStdin(stream, { firstByteTimeoutMs: 20, idleTimeoutMs: 10 });
+
+  stream.write('{"cwd":"/tmp/top","workspace":{"current_dir":"/tmp/ws"}}');
+
+  const result = await resultPromise;
+  assert.equal(result.cwd, '/tmp/top');
+});
+
 test('readStdin parses JSON split across multiple chunks', async () => {
   const stream = createPipe();
   const resultPromise = readStdin(stream, { firstByteTimeoutMs: 20, idleTimeoutMs: 10 });

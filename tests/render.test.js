@@ -321,11 +321,29 @@ test('renderSessionLine displays project name from POSIX cwd', () => {
   assert.ok(!line.includes('/Users/jarrod'));
 });
 
-test('renderSessionLine displays project name from Windows cwd', { skip: process.platform !== 'win32' }, () => {
+// Host-independent: the cwd split uses /[/\\]/, so Windows-style paths render
+// correctly on any platform. No win32 gate needed (previously skipped off-Windows).
+test('renderSessionLine displays project name from Windows cwd', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = 'C:\\Users\\jarrod\\my-project';
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('my-project'));
+  assert.ok(!line.includes('C:\\'));
+});
+
+test('renderSessionLine handles a deep Windows cwd (drive prefix dropped)', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'D:\\dev\\work\\acme-app';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('acme-app'));
+  assert.ok(!line.includes('D:\\'));
+});
+
+test('renderSessionLine handles a mixed-separator Windows cwd', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'C:\\Users\\dev/project-x';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('project-x'));
   assert.ok(!line.includes('C:\\'));
 });
 
@@ -616,6 +634,35 @@ test('renderProjectLine places customLine at end when position is last', () => {
   const customIdx = line.indexOf('prod-server');
   const modelIdx = line.indexOf('[Opus]');
   assert.ok(customIdx > modelIdx, 'custom line should appear after model badge when position is last');
+});
+
+test('renderProjectLine (natural style) renders customLine at end by default', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.projectStyle = 'natural';
+  ctx.config.display.customLine = 'prod-server';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const projectIdx = line.indexOf('my-project');
+  assert.ok(customIdx >= 0, 'natural style should include the custom line');
+  assert.ok(customIdx > projectIdx, 'default position should place custom line after the project');
+});
+
+test('renderProjectLine (natural style) places customLine first when position is first', () => {
+  // Regression: gating buildExtras to position 'last' must not drop customLine in
+  // natural style, which has no upstream 'first' handling of its own.
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.projectStyle = 'natural';
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'first';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const projectIdx = line.indexOf('my-project');
+  assert.ok(customIdx >= 0, 'natural style must still render customLine when position is first');
+  assert.ok(customIdx < projectIdx, 'custom line should appear before the project in first position');
+  // And it must appear exactly once (no duplication between front-push and extras).
+  assert.equal((line.match(/prod-server/g) ?? []).length, 1);
 });
 
 test('renderProjectLine applies modelFormat compact (strips context suffix)', () => {
@@ -958,7 +1005,10 @@ test('renderToolsLine keeps default tool cap and full names', () => {
   ];
 
   const line = stripAnsi(renderToolsLine(ctx) ?? '');
-  assert.ok(line.includes('mcp__plugin_context-mode_context-mode__ctx_batch_execute'));
+  // Fork divergence: the fork always compresses MCP tool names to `<scope>:<fn>`
+  // via formatToolName (OMC-compat readability), even when toolNameMaxLength is 0.
+  // Upstream renders the raw `mcp__…` name here; the fork shows the scoped form.
+  assert.ok(line.includes('context-mode:ctx_batch_execute'));
   assert.ok(!line.includes('Write ×1'));
 });
 
@@ -1050,7 +1100,11 @@ test('renderToolsLine preserves running targets and path truncation with shorten
   ];
 
   const line = stripAnsi(renderToolsLine(ctx) ?? '');
-  assert.ok(line.includes('lon…'));
+  // Fork divergence: running tool names are compressed by formatToolName first
+  // (`mcp__plugin__long_running_tool` → `plugin:long_running_tool`) and only then
+  // capped by toolNameMaxLength, so a max of 4 yields `plu…` rather than upstream's
+  // last-segment `lon…`. Target truncation is unaffected.
+  assert.ok(line.includes('plu…'));
   assert.ok(line.includes('.../authentication.ts'));
 });
 
@@ -1156,7 +1210,7 @@ test('renderAgentsLine renders completed agents', () => {
   ];
 
   const line = renderAgentsLine(ctx);
-  assert.ok(line?.includes('explore'));
+  assert.ok(line?.includes('Explore'));
   assert.ok(line?.includes('haiku'));
 });
 
@@ -2254,7 +2308,7 @@ test('render expanded layout honors custom elementOrder including activity place
   const combinedIndex = lines.findIndex(line => line.includes('Usage') && line.includes('Context'));
   const memoryIndex = lines.findIndex(line => line.includes('Approx RAM'));
   const environmentIndex = lines.findIndex(line => line.includes('CLAUDE.md'));
-  const agentIndex = lines.findIndex(line => line.includes('planner'));
+  const agentIndex = lines.findIndex(line => line.includes('Planner'));
   const todoIndex = lines.findIndex(line => line.includes('todo-marker'));
 
   assert.deepEqual(

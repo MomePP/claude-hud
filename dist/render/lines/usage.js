@@ -65,6 +65,7 @@ export function renderUsageLine(ctx, alignLabels = false) {
     }
     const usageBarEnabled = display?.usageBarEnabled ?? true;
     const barWidth = getAdaptiveBarWidth();
+    const barStyle = display?.barStyle;
     if (fiveHour === null && sevenDay !== null) {
         const weeklyOnlyPart = formatUsageWindowPart({
             label: t("label.weekly"),
@@ -75,6 +76,7 @@ export function renderUsageLine(ctx, alignLabels = false) {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,
@@ -91,6 +93,7 @@ export function renderUsageLine(ctx, alignLabels = false) {
         colors,
         usageBarEnabled,
         barWidth,
+        barStyle,
         timeFormat,
         showResetLabel,
         usageValueMode,
@@ -105,6 +108,7 @@ export function renderUsageLine(ctx, alignLabels = false) {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,
@@ -131,7 +135,7 @@ function formatUsagePercent(percent, colors, mode = 'percent') {
     const displayPercent = mode === 'remaining' ? Math.max(0, 100 - percent) : percent;
     return `${color}${displayPercent}%${RESET}`;
 }
-function formatUsageWindowPart({ label: windowLabel, labelKey, percent, resetAt, windowMs, colors, usageBarEnabled, barWidth, timeFormat = 'relative', showResetLabel, forceLabel = false, alignLabels = false, usageValueMode = 'percent', }) {
+function formatUsageWindowPart({ label: windowLabel, labelKey, percent, resetAt, windowMs, colors, usageBarEnabled, barWidth, barStyle, timeFormat = 'relative', showResetLabel, forceLabel = false, alignLabels = false, usageValueMode = 'percent', }) {
     const usageDisplay = formatUsagePercent(percent, colors, usageValueMode);
     const reset = formatWindowTime(resetAt, windowMs, timeFormat);
     const styledLabel = labelKey
@@ -146,8 +150,8 @@ function formatUsageWindowPart({ label: windowLabel, labelKey, percent, resetAt,
         : "";
     if (usageBarEnabled) {
         const body = resetSuffix
-            ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} ${resetSuffix}`
-            : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+            ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} ${resetSuffix}`
+            : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
         return forceLabel ? `${styledLabel} ${body}` : body;
     }
     return resetSuffix
