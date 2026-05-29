@@ -1,7 +1,7 @@
 {
   "name": "claude-hud",
   "description": "Real-time statusline HUD for Claude Code — personal fork tuned primarily for oh-my-claudecode (OMC), with OMC orchestration awareness and leftover OpenAgentsControl (OAC) compatibility. Cross-platform (Windows experimental).",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "author": {
     "name": "MomePP",
     "url": "https://github.com/MomePP"

@@ -4,6 +4,110 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-29 — MomePP fork (upstream sync: tool-name truncation, elapsed usage, customLine position, win32 hardening)
+
+Upstream sync of 21 commits (`be9902a..b293c9f`) via the rebase-reconstruct
+procedure — the fork is re-baselined onto `upstream/main` as a single linear
+commit, not merged. Adopts upstream's tool-name truncation, elapsed usage-window
+modes, custom-line positioning, an external-usage write path, and a Windows
+console-flash fix, while preserving every fork feature byte-for-byte.
+
+Minor bump (0.5.1 → 0.6.0): adds several new fork-visible config keys and flips
+one default users will notice — completed-tool overflow now renders a `+N more`
+indicator (the prior fork hard-capped at 4 silently).
+
+### Added — from upstream
+
+- **`display.toolNameMaxLength`** (number, default `0`) — hard cap on displayed
+  tool-name length; `0` keeps full names. Applied *after* the fork's MCP-name
+  compression. (`src/render/tools-line.ts`, `src/config.ts`)
+- **`display.toolsMaxVisible`** (number, default `4`) — max completed tools shown
+  on the tools line; `0` = unlimited. Adds a `+N more` overflow indicator and
+  narrow-terminal wrap. (`src/render/tools-line.ts`)
+- **`display.timeFormat`** new modes `elapsed` and `elapsedAndAbsolute` — show how
+  far through each usage window you are (`53% elapsed`), optionally plus the
+  wall-clock reset time. (`src/config.ts`, `src/render/lines/usage.ts`)
+- **`display.customLinePosition`** (`first` | `last`, default `last`) — place the
+  custom line before the model badge or at the end. (`src/config.ts`,
+  `src/render/lines/project.ts`, `src/render/session-line.ts`)
+- **`display.externalUsageWritePath`** (string, default `""`) — write the official
+  stdin `rate_limits` to a private local JSON snapshot for other tools; absolute
+  `.json` path in an existing directory only. (`src/external-usage.ts`,
+  `src/config.ts`)
+- **Context fallback + todo rendering stabilization** (upstream #579) and
+  **external usage snapshot writer hardening** (upstream #570), auto-merged.
+- Dev-dep: `@types/node` bump came along in `package-lock.json`.
+
+### Changed — fork
+
+- **Tool-name rendering composes both mechanisms** (`src/render/tools-line.ts`) —
+  the fork's `formatToolName` MCP compression (`mcp__plugin_x__fn` → `x:fn`) runs
+  first, then upstream's `shortenToolName` length-caps. Applied identically in the
+  running-tools and completed-tools loops, so MCP names stay readable then
+  truncate consistently (e.g. `context-mode:ctx_batch_execute` at default,
+  `plu…` at `toolNameMaxLength: 4`).
+- **`windowsHide: true` on every git spawn** (`src/git.ts`) — adopted upstream's
+  console-flash fix, grafted onto the fork's cached `Promise.allSettled` git path
+  (all four parallel execs + the Stage-B numstat).
+- **customLine positioning works in both project styles** (`src/render/lines/project.ts:100`,
+  `:292`) — `buildExtras` emits customLine only at the default `last` position; a
+  `first` front-push was added to **both** `renderPipesProjectLine` and the
+  fork-only `renderNaturalProjectLine`, so customLine is never dropped (natural +
+  `first`) or duplicated (pipes + `first`).
+
+### Conflict resolutions (kept fork features intact)
+
+- `src/config.ts` — merged `TimeFormatMode` to carry both the fork's existing
+  modes and upstream's `elapsed`/`elapsedAndAbsolute`; kept fork-only
+  `ProjectStyleMode`/`BarStyleMode`/`AgentNamespaceMode` alongside upstream's new
+  `CustomLinePosition`. Default-color pins, optional `barFilled`/`barEmpty`, and
+  independent `colors.thinking`/`colors.duration` all preserved.
+- `src/render/tools-line.ts` — kept fork's `formatToolName`/`formatToolTarget`
+  (MCP compression + `Skill` namespace formatting); added upstream's
+  `shortenToolName`/`toolNameMaxLength`/`toolsMaxVisible` around it.
+- `src/render/lines/project.ts` — kept the natural-style git block (`coreSegments`
+  prose layout) where upstream had edited its single-function customLine handling.
+- `src/git.ts` — `git checkout --ours` semantics on the parse structure (fork's
+  cache + parallel execs), then grafted `windowsHide` surgically.
+- `commands/setup.md` — `--ours` wholesale (fork launcher-based setup).
+- `README.md` — added/updated upstream option rows in the fork's reorganized table.
+- `tests/render.test.js` — adapted two upstream tool-name tests to the fork's
+  `formatToolName` compression; added natural-mode customLine position regression
+  tests.
+
+### Skipped (per fork direction)
+
+- **Upstream `setup.md` statusline backup/detect flow** — the fork uses
+  per-platform launcher scripts (`scripts/claude-hud.sh`/`.ps1`) that
+  `settings.json` points at, not upstream's inline one-liner. Kept fork setup via
+  `--ours`.
+- **No `.github/workflows/`** — the fork runs no CI; upstream workflow files are
+  never imported.
+- **Default-color pins** (`model: green`, `project: cyan`, `gitBranch: brightMagenta`),
+  **optional `colors.barFilled`/`colors.barEmpty`**, and **independent
+  `colors.thinking`/`colors.duration`** — all preserved against upstream
+  re-theming / consolidation.
+
+### Default-behavior changes visible on update
+
+- Completed-tool overflow now shows a **`+N more`** indicator when more than
+  `toolsMaxVisible` (default 4) distinct completed tools are present. The prior
+  fork capped at 4 silently with no overflow hint. Tool-name truncation stays off
+  by default (`toolNameMaxLength: 0`), so names are unchanged unless opted in.
+
+### Tests
+
+695 tests, all pass, 0 skipped (was 657 on 0.5.1; +38 from adopted upstream
+suites and fork regression cases). Fork-specific suites (`tests/transcript-omc.test.js`,
+the tools-line MCP-compression and natural-mode customLine cases in
+`tests/render.test.js`) still cover the preserved fork features.
+
+### Bumped
+
+- `package.json` → `0.6.0`
+- `.claude-plugin/plugin.json` → `0.6.0`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.6.0`
+
 ## [0.5.1] - 2026-05-27 — MomePP fork (stdin cwd resilience hardening)
 
 Patch: resilience-only hardening — **no user-visible change today** (current
