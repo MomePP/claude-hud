@@ -48,7 +48,16 @@ interface GitCacheKey {
 interface GitCacheFile {
   key: GitCacheKey;
   data: GitStatus | null;
+  computedAt?: number;
 }
+
+// Max-age backstop for the sentinel cache. Unstaged working-tree edits/deletes of tracked
+// files (e.g. an in-place editor write or `> file`) change isDirty/fileStats but touch no
+// `.git/` sentinel, so the sentinel check alone would serve a stale clean/dirty state forever.
+// Bounding cache age to a few seconds keeps isDirty correct within that window. At the ~300ms
+// statusline cadence this is roughly a 6x reduction in git spawns vs. uncached, while still
+// reflecting a freshly-edited file quickly.
+const GIT_CACHE_MAX_AGE_MS = 2000;
 
 export async function getGitBranch(cwd?: string): Promise<string | null> {
   if (!cwd) return null;
@@ -86,7 +95,11 @@ export async function getGitStatus(cwd?: string): Promise<GitStatus | null> {
   const cached = readGitCache(cwd);
   const currentSentinels = statSentinels(sentinelPaths);
 
-  if (cached && sentinelsMatch(cached.key.sentinels, currentSentinels)) {
+  if (
+    cached
+    && isWithinMaxAge(cached.computedAt)
+    && sentinelsMatch(cached.key.sentinels, currentSentinels)
+  ) {
     return cached.data;
   }
 
@@ -302,15 +315,85 @@ function applyLineDiffsToFiles(files: TrackedFile[], perFileDiff: Map<string, Li
 // --- Cache ---
 
 function buildGitSentinelPaths(cwd: string, gitDir: string): string[] {
-  return [
+  const paths = [
     path.join(gitDir, 'HEAD'),         // branch switches
     path.join(gitDir, 'index'),        // stage operations
     path.join(gitDir, 'FETCH_HEAD'),   // fetches (ahead/behind)
     path.join(gitDir, 'ORIG_HEAD'),    // merge/rebase in progress
     path.join(gitDir, 'MERGE_HEAD'),   // merge in progress
     path.join(gitDir, 'config'),       // remote URL changes
+    path.join(gitDir, 'packed-refs'),  // pushes/repacks against packed refs (ahead/behind)
     cwd,                                // top-level untracked-file adds/removes
   ];
+
+  // ahead/behind (`git rev-list @{upstream}...HEAD`) depends on two refs that the sentinels
+  // above do not track when they move:
+  //   - the LOCAL branch ref (refs/heads/<branch>) — `git commit` touches `index`, but
+  //     `git update-ref`/`git branch -f`/another worktree move it with no index change.
+  //   - the UPSTREAM remote-tracking ref (refs/remotes/<remote>/<branch>) — a `git push`
+  //     advances it and touches NONE of the sentinels above (fetch updates FETCH_HEAD;
+  //     push does not).
+  // Watch both loose ref files; packed-refs above covers the case where either is packed.
+  for (const refPath of resolveRefSentinelPaths(gitDir)) {
+    paths.push(refPath);
+  }
+
+  return paths;
+}
+
+// Resolve the loose-ref paths whose movement affects ahead/behind: the current branch's
+// local ref and its configured upstream ref, derived from HEAD + config. Returns [] for
+// detached HEAD. A ref file may not exist (the ref is packed) — statSentinel records that
+// as a `null` sentinel, and a later op that materializes the loose ref flips null→value,
+// busting the cache.
+function resolveRefSentinelPaths(gitDir: string): string[] {
+  try {
+    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const headMatch = head.match(/^ref:\s*refs\/heads\/(.+)$/);
+    if (!headMatch) return []; // detached HEAD — no symbolic branch
+    const branch = headMatch[1];
+
+    const result = [path.join(gitDir, 'refs', 'heads', ...branch.split('/'))];
+
+    const config = fs.readFileSync(path.join(gitDir, 'config'), 'utf8');
+    const upstream = parseBranchUpstream(config, branch);
+    if (upstream) {
+      const refSegments = upstream.merge.replace(/^refs\/heads\//, '').split('/');
+      result.push(path.join(gitDir, 'refs', 'remotes', upstream.remote, ...refSegments));
+    }
+
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+// Extract `remote` and `merge` from the `[branch "<name>"]` section of a git config.
+// Returns null when the branch has no upstream configured.
+function parseBranchUpstream(config: string, branch: string): { remote: string; merge: string } | null {
+  const lines = config.split('\n');
+  let inSection = false;
+  let remote: string | undefined;
+  let merge: string | undefined;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const sectionMatch = line.match(/^\[(.+)\]$/);
+    if (sectionMatch) {
+      // Section header — `[branch "name"]`. Match the exact branch (quoted name).
+      inSection = sectionMatch[1].trim() === `branch "${branch}"`;
+      continue;
+    }
+    if (!inSection) continue;
+
+    const remoteMatch = line.match(/^remote\s*=\s*(.+)$/);
+    if (remoteMatch) remote = remoteMatch[1].trim();
+    const mergeMatch = line.match(/^merge\s*=\s*(.+)$/);
+    if (mergeMatch) merge = mergeMatch[1].trim();
+  }
+
+  if (!remote || !merge) return null;
+  return { remote, merge };
 }
 
 function statSentinel(filePath: string): SentinelState | null {
@@ -379,8 +462,18 @@ function writeGitCache(key: GitCacheKey, data: GitStatus | null): void {
   try {
     const cachePath = getGitCachePath(key.cwd);
     fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    fs.writeFileSync(cachePath, JSON.stringify({ key, data }), 'utf8');
+    const entry: GitCacheFile = { key, data, computedAt: Date.now() };
+    fs.writeFileSync(cachePath, JSON.stringify(entry), 'utf8');
   } catch {
     // Cache write failures are non-fatal.
   }
+}
+
+// A cache entry is fresh only within GIT_CACHE_MAX_AGE_MS of when it was computed. A missing
+// `computedAt` (older cache format) or a clock that has gone backwards counts as stale, so we
+// recompute rather than trust an unbounded-age entry.
+function isWithinMaxAge(computedAt: number | undefined): boolean {
+  if (typeof computedAt !== 'number') return false;
+  const age = Date.now() - computedAt;
+  return age >= 0 && age < GIT_CACHE_MAX_AGE_MS;
 }
