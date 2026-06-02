@@ -4,6 +4,72 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-02 — MomePP fork (git-status cache invalidation fixes)
+
+Fork-only bugfix. No upstream sync. The mtime-sentinel git-status cache (the
+performance optimization that avoids spawning ~5 git processes per ~300ms
+statusline tick) served stale data in four cases the sentinel set never
+covered — most visibly an already-pushed commit still counted as `ahead` on
+the first statusline render of a new session.
+
+Patch bump (0.6.0 → 0.6.1): pure correctness fix, no config keys added and no
+visible default behavior changed beyond the statusline now reflecting reality
+sooner.
+
+### Added — from upstream
+
+- None. This release contains no upstream changes.
+
+### Changed — fork
+
+- **Git-status cache now invalidates on push and ref moves.** Added the local
+  branch ref (`refs/heads/<branch>`), the configured upstream ref
+  (`refs/remotes/<remote>/<branch>`), and `packed-refs` to the sentinel set.
+  `git push` advances the upstream ref while touching none of the prior
+  sentinels (fetch updates `FETCH_HEAD`; push does not), and
+  `git update-ref`/`branch -f`/worktree moves shift the local ref with no
+  index change — both previously left `ahead`/`behind` stale.
+  (`src/git.ts` — `resolveRefSentinelPaths`, `parseBranchUpstream`,
+  `buildGitSentinelPaths`)
+- **2s max-age TTL backstop** (`GIT_CACHE_MAX_AGE_MS`, `src/git.ts`) — in-place
+  edits/deletes of tracked files change `isDirty`/`fileStats` but touch no
+  `.git/` file, so the sentinel check alone served a stale clean/dirty state
+  indefinitely. Bounding cache age to 2s keeps `isDirty` correct within that
+  window while still cutting git spawns ~6× vs. uncached. Cache entries lacking
+  `computedAt` (older format) or with backwards clock skew count as stale.
+
+### Conflict resolutions (kept fork features intact)
+
+- N/A — no merge; single fork commit on top of `0.6.0`.
+
+### Skipped (per fork direction)
+
+- Nothing rejected this cycle (no upstream changes to evaluate). The standing
+  rejections (macOS/Linux launcher-only setup, optional `colors.barFilled`/
+  `colors.barEmpty`, `colors.thinking`/`colors.duration` preservation, pinned
+  default colors, no CI workflows) remain in force and untouched.
+
+### Default-behavior changes visible on update
+
+- The statusline now drops a stale `ahead`/`behind` count (e.g. an
+  already-pushed commit shown as unpushed) on the next tick after a push or ref
+  move, and reflects an unstaged tracked-file edit within ~2s. No config
+  changes required.
+
+### Tests
+
+- `npm test` — 698 pass, 0 fail, 0 skipped. Added three regression tests in
+  `tests/git.test.js`: `ahead` refresh after push, `ahead` refresh after a
+  local ref move via `update-ref`, and TTL-driven `isDirty` detection for an
+  in-place tracked-file edit. Fork-specific parser suites
+  (`tests/transcript-omc.test.js`) remain green.
+
+### Bumped
+
+- `package.json` → `0.6.1`
+- `.claude-plugin/plugin.json` → `0.6.1`
+- `.claude-plugin/marketplace.json` → `0.6.1`
+
 ## [0.6.0] - 2026-05-29 — MomePP fork (upstream sync: tool-name truncation, elapsed usage, customLine position, win32 hardening)
 
 Upstream sync of 21 commits (`be9902a..b293c9f`) via the rebase-reconstruct
