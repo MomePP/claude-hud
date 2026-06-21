@@ -39,3 +39,79 @@ test('parseTranscript leaves latestSuperpowersSkill undefined when no superpower
   const result = await parseTranscript(file);
   assert.equal(result.latestSuperpowersSkill, undefined);
 });
+
+import { readSuperpowersState } from '../dist/superpowers-state.js';
+
+const NOW = new Date('2026-06-21T10:00:00.000Z').getTime();
+const FRESH = 900000; // 15 min
+
+function spInput(over = {}) {
+  return {
+    cwd: undefined,
+    latestSuperpowersSkill: undefined,
+    todos: [],
+    agentsActive: 0,
+    now: NOW,
+    freshnessMs: FRESH,
+    ...over,
+  };
+}
+
+test('readSuperpowersState: fresh skill → active badge, phase from skill', () => {
+  const s = readSuperpowersState(spInput({
+    latestSuperpowersSkill: { name: 'executing-plans', at: new Date(NOW - 60000) },
+  }));
+  assert.ok(s);
+  assert.equal(s.source, 'superpowers');
+  assert.equal(s.mode, 'executing-plans');
+  assert.equal(s.active, true);
+});
+
+test('readSuperpowersState: stale skill, no progress file → null', () => {
+  const s = readSuperpowersState(spInput({
+    latestSuperpowersSkill: { name: 'brainstorming', at: new Date(NOW - FRESH - 1000) },
+  }));
+  assert.equal(s, null);
+});
+
+test('readSuperpowersState: no signal at all → null', () => {
+  assert.equal(readSuperpowersState(spInput()), null);
+});
+
+test('readSuperpowersState: todos fallback when no progress file', () => {
+  const s = readSuperpowersState(spInput({
+    latestSuperpowersSkill: { name: 'executing-plans', at: new Date(NOW) },
+    todos: [
+      { content: 'a', status: 'completed' },
+      { content: 'b', status: 'in_progress' },
+      { content: 'c', status: 'pending' },
+    ],
+  }));
+  assert.deepEqual(s.taskCounts, { total: 3, completed: 1, inProgress: 1 });
+});
+
+test('readSuperpowersState: progress.md enriches task counts + objective', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-sppm-'));
+  fs.mkdirSync(path.join(dir, '.superpowers', 'sdd'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.superpowers', 'sdd', 'progress.md'),
+    '# Delivery Notes — progress ledger\n\n- [x] Task 1\n- [X] Task 2\n- [ ] Task 3\n- [ ] Task 4\n');
+  const s = readSuperpowersState(spInput({
+    cwd: dir,
+    latestSuperpowersSkill: { name: 'subagent-driven-development', at: new Date(NOW) },
+  }));
+  assert.deepEqual(s.taskCounts, { total: 4, completed: 2, inProgress: 0 });
+  assert.equal(s.objective, 'Delivery Notes — progress ledger');
+});
+
+test('readSuperpowersState: progress file with incomplete tasks keeps badge active even with stale skill', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-sppm2-'));
+  fs.mkdirSync(path.join(dir, '.superpowers', 'sdd'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.superpowers', 'sdd', 'progress.md'), '- [x] one\n- [ ] two\n');
+  const s = readSuperpowersState(spInput({
+    cwd: dir,
+    latestSuperpowersSkill: { name: 'subagent-driven-development', at: new Date(NOW - FRESH - 1) },
+  }));
+  assert.ok(s);
+  assert.equal(s.active, true);
+  assert.equal(s.mode, 'subagent-driven-development');
+});
