@@ -13,6 +13,9 @@ export type GitBranchOverflowMode = 'truncate' | 'wrap';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both' | 'elapsed' | 'elapsedAndAbsolute';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
 export type CustomLinePosition = 'first' | 'last';
 export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'skills' | 'mcp' | 'agents' | 'todos' | 'sessionTime';
 export type AddedDirsLayout = 'inline' | 'line';
@@ -31,8 +34,10 @@ export interface HudColorOverrides {
     gitBranch: HudColorValue;
     label: HudColorValue;
     custom: HudColorValue;
-    barFilled: string;
-    barEmpty: string;
+    thinking: HudColorValue;
+    duration: HudColorValue;
+    barFilled?: string;
+    barEmpty?: string;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
@@ -49,6 +54,7 @@ export interface HudConfig {
         showDirty: boolean;
         showAheadBehind: boolean;
         showFileStats: boolean;
+        showFileList: boolean;
         branchOverflow: GitBranchOverflowMode;
         pushWarningThreshold: number;
         pushCriticalThreshold: number;
@@ -85,6 +91,9 @@ export interface HudConfig {
         promptCacheTtlSeconds: number;
         showSessionTokens: boolean;
         showOutputStyle: boolean;
+        showThinkingIndicator: boolean;
+        showPendingPermission: boolean;
+        showLastRequestTokens: boolean;
         showSessionStartDate: boolean;
         showLastResponseAt: boolean;
         showCompactions: boolean;
@@ -105,6 +114,16 @@ export interface HudConfig {
         customLine: string;
         customLinePosition: CustomLinePosition;
         timeFormat: TimeFormatMode;
+        projectStyle: ProjectStyleMode;
+        naturalSeparator: string;
+        modelGlyph: string;
+        projectGlyph: string;
+        branchGlyph: string;
+        durationGlyph: string;
+        barStyle: BarStyleMode;
+        agentNamespaceMode: AgentNamespaceMode;
+        showOmcMode: boolean;
+        showOmcState: boolean;
         showAdvisor: boolean;
         advisorOverride: string;
         autoCompactWindow: number | null;

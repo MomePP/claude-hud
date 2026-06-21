@@ -1,5 +1,6 @@
 import type { RenderContext, AgentEntry } from '../types.js';
 import { yellow, green, magenta, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 import { truncateString } from '../utils/truncate.js';
 
 const MAX_RECENT_COMPLETED = 2;
@@ -27,9 +28,10 @@ export function renderAgentsLine(ctx: RenderContext): string | null {
     return null;
   }
 
+  const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
   const lines: string[] = [];
   for (const agent of toShow) {
-    lines.push(formatAgent(agent, colors));
+    lines.push(formatAgent(agent, colors, namespaceMode));
   }
   return lines.join('\n');
 }
@@ -48,10 +50,11 @@ function getStatusIcon(
 
 function formatAgent(
   agent: AgentEntry,
-  colors?: RenderContext['config']['colors']
+  colors: RenderContext['config']['colors'] | undefined,
+  namespaceMode: import('../config.js').AgentNamespaceMode
 ): string {
   const statusIcon = getStatusIcon(agent.status);
-  const type = magenta(agent.type);
+  const type = magenta(formatNamespaced(agent.type, namespaceMode));
   const model = agent.model ? label(`[${agent.model}]`, colors) : '';
   const desc = agent.description
     ? label(`: ${truncateString(agent.description, 40)}`, colors)

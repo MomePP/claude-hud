@@ -40,7 +40,7 @@ export function renderIdentityLine(
 
   let line =
     display?.showContextBar !== false
-      ? `${progressLabel("label.context", colors, alignLabels)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, contextThresholds)} ${contextValueDisplay}`
+      ? `${progressLabel("label.context", colors, alignLabels)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, display?.barStyle, contextThresholds)} ${contextValueDisplay}`
       : `${progressLabel("label.context", colors, alignLabels)} ${contextValueDisplay}`;
 
   if (display?.showTokenBreakdown !== false && percent >= (display?.contextCriticalThreshold ?? 85)) {

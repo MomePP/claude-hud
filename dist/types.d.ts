@@ -1,5 +1,6 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
+import type { OmcState } from './omc-state.js';
 export interface StdinData {
     transcript_path?: string;
     cwd?: string;
@@ -103,6 +104,20 @@ export interface SessionTokenUsage {
     cacheCreationTokens: number;
     cacheReadTokens: number;
 }
+export interface LastRequestTokenUsage {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens?: number;
+}
+export interface ThinkingState {
+    active: boolean;
+    lastSeen: Date;
+}
+export interface PendingPermission {
+    toolName: string;
+    targetSummary: string;
+    timestamp: Date;
+}
 export interface TranscriptData {
     tools: ToolEntry[];
     skills: string[];
@@ -113,6 +128,9 @@ export interface TranscriptData {
     sessionName?: string;
     lastAssistantResponseAt?: Date;
     sessionTokens?: SessionTokenUsage;
+    lastRequestTokenUsage?: LastRequestTokenUsage;
+    thinkingState?: ThinkingState;
+    pendingPermission?: PendingPermission;
     lastCompactBoundaryAt?: Date;
     lastCompactPostTokens?: number;
     compactionCount?: number;
@@ -131,6 +149,7 @@ export interface RenderContext {
     memoryUsage: MemoryInfo | null;
     config: HudConfig;
     extraLabel: string | null;
+    omcState?: OmcState | null;
     outputStyle?: string;
     claudeCodeVersion?: string;
     effortLevel?: string;

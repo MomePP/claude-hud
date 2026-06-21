@@ -33,6 +33,10 @@ const readDefaultMemory = () => ({
     totalBytes: os.totalmem(),
     freeBytes: os.freemem(),
 });
+// Windows: os.totalmem()/os.freemem() report physical RAM correctly (they wrap
+// GlobalMemoryStatusEx), so the generic reader is accurate — no win32-specific
+// syscall or child process needed. Aliased explicitly for clarity at the dispatch.
+const readWindowsMemory = readDefaultMemory;
 const readLinuxMemory = () => {
     try {
         const content = readFileSync('/proc/meminfo', 'utf8');
@@ -63,7 +67,8 @@ const readMacOSMemory = () => {
 };
 let readMemory = process.platform === 'darwin' ? readMacOSMemory :
     process.platform === 'linux' ? readLinuxMemory :
-        readDefaultMemory;
+        process.platform === 'win32' ? readWindowsMemory :
+            readDefaultMemory;
 export async function getMemoryUsage() {
     try {
         const { totalBytes, freeBytes } = readMemory();

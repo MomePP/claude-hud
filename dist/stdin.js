@@ -52,9 +52,17 @@ export async function readStdin(stream = process.stdin, options = {}) {
                 return null;
             }
             try {
-                return JSON.parse(trimmed);
+                const data = JSON.parse(trimmed);
+                // Resilience: Claude Code currently sends a top-level `cwd`, but the
+                // statusline payload also carries `workspace.current_dir`. Fall back to
+                // it so project name / git / config counts / OMC state keep resolving if
+                // a future Claude Code version moves cwd solely under `workspace`.
+                if (!data.cwd && typeof data.workspace?.current_dir === 'string') {
+                    data.cwd = data.workspace.current_dir;
+                }
+                return data;
             }
-            catch (err) {
+            catch {
                 debug('JSON parse incomplete/invalid, waiting for more data');
                 return undefined;
             }

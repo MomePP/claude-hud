@@ -358,6 +358,97 @@ test('getGitStatus keeps line diffs for literal filenames containing arrow text'
   }
 });
 
+test('getGitStatus refreshes ahead count after a push (cache busts on upstream ref change)', async () => {
+  const remoteDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-remote-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-git-'));
+  try {
+    // Bare remote to push into.
+    execFileSync('git', ['init', '--bare'], { cwd: remoteDir, stdio: 'ignore' });
+
+    execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: dir, stdio: 'ignore' });
+
+    // New local commit that is not yet pushed → ahead = 1.
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'local work'], { cwd: dir, stdio: 'ignore' });
+    const ahead = await getGitStatus(dir);
+    assert.equal(ahead?.ahead, 1, `expected ahead=1 before push, got ${ahead?.ahead}`);
+
+    // Push it. This advances refs/remotes/origin/main but touches no other sentinel.
+    execFileSync('git', ['push', 'origin', 'main'], { cwd: dir, stdio: 'ignore' });
+
+    const after = await getGitStatus(dir);
+    assert.equal(after?.ahead, 0, `expected ahead=0 after push (stale cache bug), got ${after?.ahead}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    await rm(remoteDir, { recursive: true, force: true });
+  }
+});
+
+test('getGitStatus refreshes ahead count after the local branch ref moves (update-ref)', async () => {
+  const remoteDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-remote-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-git-'));
+  try {
+    execFileSync('git', ['init', '--bare'], { cwd: remoteDir, stdio: 'ignore' });
+    execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: dir, stdio: 'ignore' });
+
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'local work'], { cwd: dir, stdio: 'ignore' });
+    const ahead = await getGitStatus(dir);
+    assert.equal(ahead?.ahead, 1, `expected ahead=1, got ${ahead?.ahead}`);
+
+    // Move the local branch ref back via update-ref: no index change, no ORIG_HEAD.
+    execFileSync('git', ['update-ref', 'refs/heads/main', 'HEAD~1'], { cwd: dir, stdio: 'ignore' });
+    const after = await getGitStatus(dir);
+    assert.equal(after?.ahead, 0, `expected ahead=0 after local ref move, got ${after?.ahead}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    await rm(remoteDir, { recursive: true, force: true });
+  }
+});
+
+test('getGitStatus reflects an in-place edit of a tracked file within the cache max-age', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-git-'));
+  try {
+    execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir, stdio: 'ignore' });
+
+    const nested = path.join(dir, 'src');
+    execFileSync('mkdir', ['-p', nested]);
+    await writeFile(path.join(nested, 'foo.txt'), 'one\ntwo\n');
+    execFileSync('git', ['add', '-A'], { cwd: dir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'add foo'], { cwd: dir, stdio: 'ignore' });
+
+    // Cache the clean state.
+    const clean = await getGitStatus(dir);
+    assert.equal(clean?.isDirty, false);
+
+    // Edit the tracked nested file in place — changes no .git/ sentinel.
+    await writeFile(path.join(nested, 'foo.txt'), 'one\ntwo\nthree\n');
+
+    // Within the max-age window the cache may still be clean; after it elapses the
+    // status must reflect the edit. Poll past the 2s TTL.
+    let dirty = false;
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const s = await getGitStatus(dir);
+      if (s?.isDirty) { dirty = true; break; }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    assert.equal(dirty, true, 'expected isDirty to become true after the cache max-age elapsed');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('getGitStatus builds branchUrl from HTTPS origin remotes', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'claude-hud-git-'));
   try {

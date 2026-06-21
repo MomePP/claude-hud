@@ -90,6 +90,7 @@ export function renderUsageLine(
 
   const usageBarEnabled = display?.usageBarEnabled ?? true;
   const barWidth = getAdaptiveBarWidth();
+  const barStyle = display?.barStyle;
 
   if (fiveHour === null && sevenDay !== null) {
     const weeklyOnlyPart = formatUsageWindowPart({
@@ -101,6 +102,7 @@ export function renderUsageLine(
       colors,
       usageBarEnabled,
       barWidth,
+      barStyle,
       timeFormat,
       showResetLabel,
       forceLabel: true,
@@ -118,6 +120,7 @@ export function renderUsageLine(
     colors,
     usageBarEnabled,
     barWidth,
+    barStyle,
     timeFormat,
     showResetLabel,
     usageValueMode,
@@ -133,6 +136,7 @@ export function renderUsageLine(
       colors,
       usageBarEnabled,
       barWidth,
+      barStyle,
       timeFormat,
       showResetLabel,
       forceLabel: true,
@@ -188,6 +192,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   timeFormat = 'relative',
   showResetLabel,
   forceLabel = false,
@@ -202,6 +207,7 @@ function formatUsageWindowPart({
   colors?: RenderContext["config"]["colors"];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
   timeFormat?: TimeFormatMode;
   showResetLabel: boolean;
   forceLabel?: boolean;
@@ -224,8 +230,8 @@ function formatUsageWindowPart({
 
   if (usageBarEnabled) {
     const body = resetSuffix
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} ${resetSuffix}`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} ${resetSuffix}`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

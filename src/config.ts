@@ -23,6 +23,9 @@ export type GitBranchOverflowMode = 'truncate' | 'wrap';
  */
 export type ModelFormatMode = 'full' | 'compact' | 'short';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both' | 'elapsed' | 'elapsedAndAbsolute';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
 export type CustomLinePosition = 'first' | 'last';
 export type HudElement =
   | 'project'
@@ -65,8 +68,10 @@ export interface HudColorOverrides {
   gitBranch: HudColorValue;
   label: HudColorValue;
   custom: HudColorValue;
-  barFilled: string;
-  barEmpty: string;
+  thinking: HudColorValue;
+  duration: HudColorValue;
+  barFilled?: string;
+  barEmpty?: string;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -104,6 +109,7 @@ export interface HudConfig {
     showDirty: boolean;
     showAheadBehind: boolean;
     showFileStats: boolean;
+    showFileList: boolean;
     branchOverflow: GitBranchOverflowMode;
     pushWarningThreshold: number;
     pushCriticalThreshold: number;
@@ -140,6 +146,9 @@ export interface HudConfig {
     promptCacheTtlSeconds: number;
     showSessionTokens: boolean;
     showOutputStyle: boolean;
+    showThinkingIndicator: boolean;
+    showPendingPermission: boolean;
+    showLastRequestTokens: boolean;
     showSessionStartDate: boolean;
     showLastResponseAt: boolean;
     // Show how many context compactions (manual /compact or auto) have
@@ -166,6 +175,16 @@ export interface HudConfig {
     customLine: string;
     customLinePosition: CustomLinePosition;
     timeFormat: TimeFormatMode;
+    projectStyle: ProjectStyleMode;
+    naturalSeparator: string;
+    modelGlyph: string;
+    projectGlyph: string;
+    branchGlyph: string;
+    durationGlyph: string;
+    barStyle: BarStyleMode;
+    agentNamespaceMode: AgentNamespaceMode;
+    showOmcMode: boolean;
+    showOmcState: boolean;
     // Show the advisor model when `/advisor` is configured for the session.
     // The model ID is read from the transcript (see TranscriptData.advisorModel)
     // so it reflects the actual current choice, not a global default.
@@ -192,6 +211,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showDirty: true,
     showAheadBehind: false,
     showFileStats: false,
+    showFileList: false,
     branchOverflow: 'truncate',
     pushWarningThreshold: 0,
     pushCriticalThreshold: 0,
@@ -228,6 +248,9 @@ export const DEFAULT_CONFIG: HudConfig = {
     promptCacheTtlSeconds: 300,
     showSessionTokens: false,
     showOutputStyle: false,
+    showThinkingIndicator: true,
+    showPendingPermission: true,
+    showLastRequestTokens: false,
     showSessionStartDate: false,
     showLastResponseAt: false,
     showCompactions: false,
@@ -248,6 +271,16 @@ export const DEFAULT_CONFIG: HudConfig = {
     customLine: '',
     customLinePosition: 'last',
     timeFormat: 'relative',
+    projectStyle: 'pipes',
+    naturalSeparator: ' \u00B7 ',
+    modelGlyph: '\uec10',
+    projectGlyph: '\uf114',
+    branchGlyph: '\ue725',
+    durationGlyph: '\uf017',
+    barStyle: 'block',
+    agentNamespaceMode: 'strip',
+    showOmcMode: true,
+    showOmcState: false,
     showAdvisor: false,
     advisorOverride: '',
     autoCompactWindow: null,
@@ -258,14 +291,14 @@ export const DEFAULT_CONFIG: HudConfig = {
     warning: 'yellow',
     usageWarning: 'brightMagenta',
     critical: 'red',
-    model: 'cyan',
-    project: 'yellow',
+    model: 'green',
+    project: 'cyan',
     git: 'magenta',
-    gitBranch: 'cyan',
+    gitBranch: 'brightMagenta',
     label: 'dim',
     custom: 208,
-    barFilled: '█',
-    barEmpty: '░',
+    thinking: 'dim',
+    duration: 'dim',
   },
 };
 
@@ -318,6 +351,24 @@ function validateCustomLinePosition(value: unknown): value is CustomLinePosition
   return value === 'first' || value === 'last';
 }
 
+function validateProjectStyle(value: unknown): value is ProjectStyleMode {
+  return value === 'pipes' || value === 'natural';
+}
+
+function validateAgentNamespaceMode(value: unknown): value is AgentNamespaceMode {
+  return value === 'strip' || value === 'badge' || value === 'raw';
+}
+
+function validateBarStyle(value: unknown): value is BarStyleMode {
+  return value === 'block'
+    || value === 'square'
+    || value === 'thin'
+    || value === 'vertical'
+    || value === 'dots'
+    || value === 'shade'
+    || value === 'double';
+}
+
 function validateColorName(value: unknown): value is HudColorName {
   return value === 'dim'
     || value === 'red'
@@ -331,11 +382,29 @@ function validateColorName(value: unknown): value is HudColorName {
 
 const UNSAFE_CODEPOINT = /[\p{Cc}\p{Cf}\p{Variation_Selector}\p{Zl}\p{Zp}\p{Cn}]/u;
 
+// Lazy singleton — see src/render/index.ts. validateBarChar is called from
+// loadConfig on every tick; eagerly constructing Intl.Segmenter at module
+// load would waste the first-construction ICU init (~6ms) when no override is set.
+let _barCharSegmenter: Intl.Segmenter | null | undefined;
+function getBarCharSegmenter(): Intl.Segmenter | null {
+  if (_barCharSegmenter !== undefined) {
+    return _barCharSegmenter;
+  }
+  _barCharSegmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+  return _barCharSegmenter;
+}
+
 function validateBarChar(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0) return false;
 
-  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-  if (Array.from(segmenter.segment(value)).length !== 1) return false;
+  const segmenter = getBarCharSegmenter();
+  if (segmenter) {
+    if (Array.from(segmenter.segment(value)).length !== 1) return false;
+  } else if (Array.from(value).length !== 1) {
+    return false;
+  }
 
   for (const ch of value) {
     if (UNSAFE_CODEPOINT.test(ch)) return false;
@@ -381,49 +450,33 @@ function validateMergeGroups(value: unknown): HudElement[][] {
   if (!Array.isArray(value)) {
     return DEFAULT_MERGE_GROUPS.map(group => [...group]);
   }
-
-  if (value.length === 0) {
-    return [];
+  const groups: HudElement[][] = [];
+  for (const rawGroup of value) {
+    if (!Array.isArray(rawGroup)) continue;
+    const seen = new Set<HudElement>();
+    const group: HudElement[] = [];
+    for (const item of rawGroup) {
+      if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item as HudElement)) continue;
+      const el = item as HudElement;
+      if (seen.has(el)) continue;
+      seen.add(el);
+      group.push(el);
+    }
+    if (group.length >= 2) groups.push(group);
   }
+  return groups;
+}
 
-  const usedElements = new Set<HudElement>();
-  const mergeGroups: HudElement[][] = [];
+function validateMaxWidth(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
 
-  for (const group of value) {
-    if (!Array.isArray(group)) {
-      continue;
-    }
-
-    const seenInGroup = new Set<HudElement>();
-    const normalizedGroup: HudElement[] = [];
-    const pendingElements: HudElement[] = [];
-
-    for (const item of group) {
-      if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item as HudElement)) {
-        continue;
-      }
-
-      const element = item as HudElement;
-      if (seenInGroup.has(element) || usedElements.has(element)) {
-        continue;
-      }
-
-      seenInGroup.add(element);
-      normalizedGroup.push(element);
-      pendingElements.push(element);
-    }
-
-    if (normalizedGroup.length >= 2) {
-      for (const element of pendingElements) {
-        usedElements.add(element);
-      }
-      mergeGroups.push(normalizedGroup);
-    }
+function validatePromptCacheTtl(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_CONFIG.display.promptCacheTtlSeconds;
   }
-
-  return mergeGroups.length > 0
-    ? mergeGroups
-    : DEFAULT_MERGE_GROUPS.map(group => [...group]);
+  return Math.floor(value);
 }
 
 interface LegacyConfig {
@@ -504,7 +557,6 @@ function validateFreshnessMs(value: unknown): number {
   }
   return Math.max(0, Math.floor(value));
 }
-
 export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
   const migrated = migrateConfig(userConfig);
   const language = validateLanguage(migrated.language)
@@ -523,10 +575,7 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     ? migrated.pathLevels
     : DEFAULT_CONFIG.pathLevels;
 
-  const rawMaxWidth = (migrated as Record<string, unknown>).maxWidth;
-  const maxWidth = (typeof rawMaxWidth === 'number' && Number.isFinite(rawMaxWidth) && rawMaxWidth > 0)
-    ? Math.floor(rawMaxWidth)
-    : null;
+  const maxWidth = validateMaxWidth(migrated.maxWidth);
 
   const elementOrder = validateElementOrder(migrated.elementOrder);
   const forceMaxWidth = typeof (migrated as Record<string, unknown>).forceMaxWidth === 'boolean'
@@ -546,6 +595,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
       ? migrated.gitStatus.showFileStats
       : DEFAULT_CONFIG.gitStatus.showFileStats,
+    showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+      ? migrated.gitStatus.showFileList
+      : DEFAULT_CONFIG.gitStatus.showFileList,
     branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
       ? migrated.gitStatus.branchOverflow
       : DEFAULT_CONFIG.gitStatus.branchOverflow,
@@ -640,16 +692,22 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showPromptCache: typeof migrated.display?.showPromptCache === 'boolean'
       ? migrated.display.showPromptCache
       : DEFAULT_CONFIG.display.showPromptCache,
-    promptCacheTtlSeconds: validateDurationSeconds(
-      migrated.display?.promptCacheTtlSeconds,
-      DEFAULT_CONFIG.display.promptCacheTtlSeconds,
-    ),
+    promptCacheTtlSeconds: validatePromptCacheTtl(migrated.display?.promptCacheTtlSeconds),
     showSessionTokens: typeof migrated.display?.showSessionTokens === 'boolean'
       ? migrated.display.showSessionTokens
       : DEFAULT_CONFIG.display.showSessionTokens,
     showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
       ? migrated.display.showOutputStyle
       : DEFAULT_CONFIG.display.showOutputStyle,
+    showThinkingIndicator: typeof migrated.display?.showThinkingIndicator === 'boolean'
+      ? migrated.display.showThinkingIndicator
+      : DEFAULT_CONFIG.display.showThinkingIndicator,
+    showPendingPermission: typeof migrated.display?.showPendingPermission === 'boolean'
+      ? migrated.display.showPendingPermission
+      : DEFAULT_CONFIG.display.showPendingPermission,
+    showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
+      ? migrated.display.showLastRequestTokens
+      : DEFAULT_CONFIG.display.showLastRequestTokens,
     showSessionStartDate: typeof migrated.display?.showSessionStartDate === 'boolean'
       ? migrated.display.showSessionStartDate
       : DEFAULT_CONFIG.display.showSessionStartDate,
@@ -698,6 +756,36 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     timeFormat: validateTimeFormat(migrated.display?.timeFormat)
       ? migrated.display.timeFormat
       : DEFAULT_CONFIG.display.timeFormat,
+    projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+      ? migrated.display.projectStyle
+      : DEFAULT_CONFIG.display.projectStyle,
+    naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+      ? migrated.display.naturalSeparator.slice(0, 8)
+      : DEFAULT_CONFIG.display.naturalSeparator,
+    modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+      ? migrated.display.modelGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.modelGlyph,
+    projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+      ? migrated.display.projectGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.projectGlyph,
+    branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+      ? migrated.display.branchGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.branchGlyph,
+    durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+      ? migrated.display.durationGlyph.slice(0, 8)
+      : DEFAULT_CONFIG.display.durationGlyph,
+    barStyle: validateBarStyle(migrated.display?.barStyle)
+      ? migrated.display.barStyle
+      : DEFAULT_CONFIG.display.barStyle,
+    agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
+      ? migrated.display.agentNamespaceMode
+      : DEFAULT_CONFIG.display.agentNamespaceMode,
+    showOmcMode: typeof migrated.display?.showOmcMode === 'boolean'
+      ? migrated.display.showOmcMode
+      : DEFAULT_CONFIG.display.showOmcMode,
+    showOmcState: typeof migrated.display?.showOmcState === 'boolean'
+      ? migrated.display.showOmcState
+      : DEFAULT_CONFIG.display.showOmcState,
     showAdvisor: typeof migrated.display?.showAdvisor === 'boolean'
       ? migrated.display.showAdvisor
       : DEFAULT_CONFIG.display.showAdvisor,
@@ -741,12 +829,18 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     custom: validateColorValue(migrated.colors?.custom)
       ? migrated.colors.custom
       : DEFAULT_CONFIG.colors.custom,
+    thinking: validateColorValue(migrated.colors?.thinking)
+      ? migrated.colors.thinking
+      : DEFAULT_CONFIG.colors.thinking,
+    duration: validateColorValue(migrated.colors?.duration)
+      ? migrated.colors.duration
+      : DEFAULT_CONFIG.colors.duration,
     barFilled: validateBarChar(migrated.colors?.barFilled)
       ? migrated.colors.barFilled
-      : DEFAULT_CONFIG.colors.barFilled,
+      : undefined,
     barEmpty: validateBarChar(migrated.colors?.barEmpty)
       ? migrated.colors.barEmpty
-      : DEFAULT_CONFIG.colors.barEmpty,
+      : undefined,
   };
 
   return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };
