@@ -135,6 +135,10 @@ export interface TranscriptData {
     lastCompactPostTokens?: number;
     compactionCount?: number;
     advisorModel?: string;
+    latestSuperpowersSkill?: {
+        name: string;
+        at: Date;
+    };
 }
 export interface RenderContext {
     stdin: StdinData;

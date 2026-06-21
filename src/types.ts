@@ -158,6 +158,9 @@ export interface TranscriptData {
   // after `/advisor` is set (e.g. "claude-opus-4-7"). undefined when /advisor
   // is off or no assistant turn has happened yet.
   advisorModel?: string;
+  // Most-recent `superpowers:<skill>` invocation (prefix stripped) and its
+  // timestamp, for the orchestration phase badge's freshness window.
+  latestSuperpowersSkill?: { name: string; at: Date };
 }
 
 export interface RenderContext {

@@ -106,6 +106,7 @@ interface SerializedTranscriptData {
   mcpServers?: string[];
   compactionCount?: number;
   advisorModel?: string;
+  latestSuperpowersSkill?: { name: string; at: string };
 }
 
 interface TranscriptCacheFile {
@@ -121,7 +122,7 @@ interface TranscriptCacheFile {
 // v10: graft upstream 0.3.0 transcript captures — advisor model, compaction
 // count, and skills/MCP activity. Bumped past upstream's v9 to invalidate any
 // caches written under the older fork (v5) and upstream (v9) parse semantics.
-const TRANSCRIPT_CACHE_VERSION = 10;
+const TRANSCRIPT_CACHE_VERSION = 11;
 
 const MCP_TOOL_NAME_PATTERN = /^mcp__(.+?)__(.+)$/;
 const ACTIVITY_NAME_MAX_LEN = 64;
@@ -266,6 +267,9 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
     mcpServers: [...data.mcpServers],
     compactionCount: data.compactionCount,
     advisorModel: data.advisorModel,
+    latestSuperpowersSkill: data.latestSuperpowersSkill
+      ? { name: data.latestSuperpowersSkill.name, at: data.latestSuperpowersSkill.at.toISOString() }
+      : undefined,
   };
 }
 
@@ -312,6 +316,11 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
       : undefined,
     advisorModel: typeof data.advisorModel === 'string' && data.advisorModel.length > 0
       ? data.advisorModel.slice(0, ADVISOR_MODEL_MAX_LEN)
+      : undefined,
+    latestSuperpowersSkill: data.latestSuperpowersSkill
+      && typeof data.latestSuperpowersSkill.name === 'string'
+      && typeof data.latestSuperpowersSkill.at === 'string'
+      ? { name: data.latestSuperpowersSkill.name, at: new Date(data.latestSuperpowersSkill.at) }
       : undefined,
   };
 }
@@ -710,6 +719,18 @@ function processEntry(
         : undefined;
       if (skillName) {
         skillSet.add(skillName);
+        // Track the most-recent superpowers phase (prefix stripped) for the
+        // orchestration badge's freshness window.
+        const SP_PREFIX = 'superpowers:';
+        if (skillName.startsWith(SP_PREFIX) && entry.timestamp) {
+          const prev = result.latestSuperpowersSkill;
+          if (!prev || timestamp.getTime() >= prev.at.getTime()) {
+            result.latestSuperpowersSkill = {
+              name: skillName.slice(SP_PREFIX.length),
+              at: timestamp,
+            };
+          }
+        }
       }
 
       const mcpServerName = extractMcpServerName(canonicalName);
