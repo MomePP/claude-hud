@@ -104,8 +104,10 @@ export const DEFAULT_CONFIG = {
         durationGlyph: '\uf017',
         barStyle: 'block',
         agentNamespaceMode: 'strip',
-        showOmcMode: true,
-        showOmcState: false,
+        orchestrationSource: 'auto',
+        showOrchestration: true,
+        showOrchestrationDetail: false,
+        orchestrationFreshnessMs: 900000,
         showAdvisor: false,
         advisorOverride: '',
         autoCompactWindow: null,
@@ -346,6 +348,17 @@ function validateAutoCompactWindow(value) {
     }
     return value;
 }
+function validateOrchestrationSource(value) {
+    return value === 'auto' || value === 'superpowers' || value === 'omc' || value === 'off'
+        ? value
+        : null;
+}
+function validateOrchestrationFreshnessMs(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+        return DEFAULT_CONFIG.display.orchestrationFreshnessMs;
+    }
+    return value;
+}
 function validateOptionalPath(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -396,6 +409,9 @@ export function mergeConfig(userConfig) {
         pushWarningThreshold: validateCountThreshold(migrated.gitStatus?.pushWarningThreshold),
         pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
     };
+    // Loosely-typed view of the user's display block for reading deprecated keys
+    // (showOmcMode/showOmcState) that no longer exist on the HudConfig type.
+    const legacyDisplay = migrated.display;
     const display = {
         showModel: typeof migrated.display?.showModel === 'boolean'
             ? migrated.display.showModel
@@ -559,12 +575,19 @@ export function mergeConfig(userConfig) {
         agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
             ? migrated.display.agentNamespaceMode
             : DEFAULT_CONFIG.display.agentNamespaceMode,
-        showOmcMode: typeof migrated.display?.showOmcMode === 'boolean'
-            ? migrated.display.showOmcMode
-            : DEFAULT_CONFIG.display.showOmcMode,
-        showOmcState: typeof migrated.display?.showOmcState === 'boolean'
-            ? migrated.display.showOmcState
-            : DEFAULT_CONFIG.display.showOmcState,
+        orchestrationSource: validateOrchestrationSource(migrated.display?.orchestrationSource)
+            ?? DEFAULT_CONFIG.display.orchestrationSource,
+        showOrchestration: typeof migrated.display?.showOrchestration === 'boolean'
+            ? migrated.display.showOrchestration
+            : (typeof legacyDisplay?.showOmcMode === 'boolean'
+                ? legacyDisplay.showOmcMode
+                : DEFAULT_CONFIG.display.showOrchestration),
+        showOrchestrationDetail: typeof migrated.display?.showOrchestrationDetail === 'boolean'
+            ? migrated.display.showOrchestrationDetail
+            : (typeof legacyDisplay?.showOmcState === 'boolean'
+                ? legacyDisplay.showOmcState
+                : DEFAULT_CONFIG.display.showOrchestrationDetail),
+        orchestrationFreshnessMs: validateOrchestrationFreshnessMs(migrated.display?.orchestrationFreshnessMs),
         showAdvisor: typeof migrated.display?.showAdvisor === 'boolean'
             ? migrated.display.showAdvisor
             : DEFAULT_CONFIG.display.showAdvisor,

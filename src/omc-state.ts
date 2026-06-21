@@ -1,26 +1,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { OrchestrationState } from './orchestration.js';
 
 /**
- * Normalized snapshot of oh-my-claudecode (OMC) orchestration state, read from
- * `<cwd>/.omc/state/mission-state.json` (+ `subagent-tracking.json`).
+ * Reads oh-my-claudecode (OMC) orchestration state from
+ * `<cwd>/.omc/state/mission-state.json` (+ `subagent-tracking.json`) and
+ * normalizes it into the shared `OrchestrationState` shape.
  *
  * The reader is fully defensive: any missing field, parse failure, or absent
  * `.omc` directory yields `null` (or zeroed counts) rather than throwing. The
  * statusline runs every ~300ms in a fresh process, so this stays a cheap,
  * direct guarded read.
  */
-export interface OmcState {
-  mode: string | null;
-  status: string;
-  active: boolean;
-  objective: string;
-  taskCounts: { total: number; completed: number; inProgress: number };
-  agentsTotal: number;
-  agentsActive: number;
-  agentsCompleted: number;
-  updatedAt: Date | null;
-}
 
 const ACTIVE_STATUSES = new Set(['active', 'running', 'in_progress', 'in-progress']);
 
@@ -73,7 +64,7 @@ function readSubagentCounts(stateDir: string): SubagentCounts {
  * Returns `null` when `cwd` is missing, the mission-state file is absent, or
  * anything fails to parse.
  */
-export function readOmcState(cwd: string | undefined): OmcState | null {
+export function readOmcState(cwd: string | undefined): OrchestrationState | null {
   if (!cwd) return null;
 
   try {
@@ -127,14 +118,12 @@ export function readOmcState(cwd: string | undefined): OmcState | null {
     }
 
     return {
+      source: 'omc',
       mode,
-      status,
       active,
       objective: coerceString(mission.objective),
       taskCounts,
-      agentsTotal: subagents.total,
       agentsActive: subagents.active,
-      agentsCompleted: subagents.completed,
       updatedAt,
     };
   } catch {

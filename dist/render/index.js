@@ -4,7 +4,7 @@ import { renderToolsLine } from './tools-line.js';
 import { renderSkillsLine, renderMcpLine } from './skills-mcp-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
-import { renderOmcStateLine } from './omc-line.js';
+import { renderOrchestrationLine } from './orchestration-line.js';
 import { renderIdentityLine, renderProjectLine, renderAddedDirsLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderCompactionsLine, renderSessionTimeLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
@@ -330,10 +330,11 @@ function collectActivityLines(ctx) {
             activityLines.push(todosLine);
         }
     }
-    // Opt-in (default off); renderOmcStateLine self-gates on showOmcState + omcState.
-    const omcStateLine = renderOmcStateLine(ctx);
-    if (omcStateLine) {
-        activityLines.push(omcStateLine);
+    // Opt-in (default off); renderOrchestrationLine self-gates on
+    // showOrchestrationDetail + orchestration.
+    const orchestrationLine = renderOrchestrationLine(ctx);
+    if (orchestrationLine) {
+        activityLines.push(orchestrationLine);
     }
     return activityLines;
 }

@@ -16,6 +16,7 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both' | 'elapsed' | 'ela
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
+export type OrchestrationSourceMode = 'auto' | 'superpowers' | 'omc' | 'off';
 export type CustomLinePosition = 'first' | 'last';
 export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'promptCache' | 'memory' | 'environment' | 'tools' | 'skills' | 'mcp' | 'agents' | 'todos' | 'sessionTime';
 export type AddedDirsLayout = 'inline' | 'line';
@@ -122,8 +123,10 @@ export interface HudConfig {
         durationGlyph: string;
         barStyle: BarStyleMode;
         agentNamespaceMode: AgentNamespaceMode;
-        showOmcMode: boolean;
-        showOmcState: boolean;
+        orchestrationSource: OrchestrationSourceMode;
+        showOrchestration: boolean;
+        showOrchestrationDetail: boolean;
+        orchestrationFreshnessMs: number;
         showAdvisor: boolean;
         advisorOverride: string;
         autoCompactWindow: number | null;

@@ -26,6 +26,7 @@ export type TimeFormatMode = 'relative' | 'absolute' | 'both' | 'elapsed' | 'ela
 export type ProjectStyleMode = 'pipes' | 'natural';
 export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
 export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
+export type OrchestrationSourceMode = 'auto' | 'superpowers' | 'omc' | 'off';
 export type CustomLinePosition = 'first' | 'last';
 export type HudElement =
   | 'project'
@@ -183,8 +184,10 @@ export interface HudConfig {
     durationGlyph: string;
     barStyle: BarStyleMode;
     agentNamespaceMode: AgentNamespaceMode;
-    showOmcMode: boolean;
-    showOmcState: boolean;
+    orchestrationSource: OrchestrationSourceMode;
+    showOrchestration: boolean;
+    showOrchestrationDetail: boolean;
+    orchestrationFreshnessMs: number;
     // Show the advisor model when `/advisor` is configured for the session.
     // The model ID is read from the transcript (see TranscriptData.advisorModel)
     // so it reflects the actual current choice, not a global default.
@@ -279,8 +282,10 @@ export const DEFAULT_CONFIG: HudConfig = {
     durationGlyph: '\uf017',
     barStyle: 'block',
     agentNamespaceMode: 'strip',
-    showOmcMode: true,
-    showOmcState: false,
+    orchestrationSource: 'auto',
+    showOrchestration: true,
+    showOrchestrationDetail: false,
+    orchestrationFreshnessMs: 900000,
     showAdvisor: false,
     advisorOverride: '',
     autoCompactWindow: null,
@@ -547,6 +552,19 @@ function validateAutoCompactWindow(value: unknown): number | null {
   return value;
 }
 
+function validateOrchestrationSource(value: unknown): OrchestrationSourceMode | null {
+  return value === 'auto' || value === 'superpowers' || value === 'omc' || value === 'off'
+    ? value
+    : null;
+}
+
+function validateOrchestrationFreshnessMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+    return DEFAULT_CONFIG.display.orchestrationFreshnessMs;
+  }
+  return value;
+}
+
 function validateOptionalPath(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -605,6 +623,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
   };
 
+  // Loosely-typed view of the user's display block for reading deprecated keys
+  // (showOmcMode/showOmcState) that no longer exist on the HudConfig type.
+  const legacyDisplay = migrated.display as Record<string, unknown> | undefined;
   const display = {
     showModel: typeof migrated.display?.showModel === 'boolean'
       ? migrated.display.showModel
@@ -780,12 +801,19 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
       ? migrated.display.agentNamespaceMode
       : DEFAULT_CONFIG.display.agentNamespaceMode,
-    showOmcMode: typeof migrated.display?.showOmcMode === 'boolean'
-      ? migrated.display.showOmcMode
-      : DEFAULT_CONFIG.display.showOmcMode,
-    showOmcState: typeof migrated.display?.showOmcState === 'boolean'
-      ? migrated.display.showOmcState
-      : DEFAULT_CONFIG.display.showOmcState,
+    orchestrationSource: validateOrchestrationSource(migrated.display?.orchestrationSource)
+      ?? DEFAULT_CONFIG.display.orchestrationSource,
+    showOrchestration: typeof migrated.display?.showOrchestration === 'boolean'
+      ? migrated.display.showOrchestration
+      : (typeof legacyDisplay?.showOmcMode === 'boolean'
+          ? legacyDisplay.showOmcMode
+          : DEFAULT_CONFIG.display.showOrchestration),
+    showOrchestrationDetail: typeof migrated.display?.showOrchestrationDetail === 'boolean'
+      ? migrated.display.showOrchestrationDetail
+      : (typeof legacyDisplay?.showOmcState === 'boolean'
+          ? legacyDisplay.showOmcState
+          : DEFAULT_CONFIG.display.showOrchestrationDetail),
+    orchestrationFreshnessMs: validateOrchestrationFreshnessMs(migrated.display?.orchestrationFreshnessMs),
     showAdvisor: typeof migrated.display?.showAdvisor === 'boolean'
       ? migrated.display.showAdvisor
       : DEFAULT_CONFIG.display.showAdvisor,

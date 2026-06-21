@@ -802,3 +802,33 @@ test('mergeConfig rejects non-string advisorOverride and non-boolean showAdvisor
   assert.equal(config.display.showAdvisor, false);
   assert.equal(config.display.advisorOverride, '');
 });
+
+test('mergeConfig: orchestration defaults', () => {
+  const c = mergeConfig({});
+  assert.equal(c.display.orchestrationSource, 'auto');
+  assert.equal(c.display.showOrchestration, true);
+  assert.equal(c.display.showOrchestrationDetail, false);
+  assert.equal(c.display.orchestrationFreshnessMs, 900000);
+});
+
+test('mergeConfig: migrates legacy showOmcMode/showOmcState when new keys absent', () => {
+  const c = mergeConfig({ display: { showOmcMode: false, showOmcState: true } });
+  assert.equal(c.display.showOrchestration, false);
+  assert.equal(c.display.showOrchestrationDetail, true);
+  assert.equal(c.display.orchestrationSource, 'auto');
+});
+
+test('mergeConfig: new keys win over legacy when both present', () => {
+  const c = mergeConfig({ display: { showOmcMode: false, showOrchestration: true } });
+  assert.equal(c.display.showOrchestration, true);
+});
+
+test('mergeConfig: orchestrationSource validates to auto on garbage', () => {
+  assert.equal(mergeConfig({ display: { orchestrationSource: 'nope' } }).display.orchestrationSource, 'auto');
+  assert.equal(mergeConfig({ display: { orchestrationSource: 'superpowers' } }).display.orchestrationSource, 'superpowers');
+});
+
+test('mergeConfig: orchestrationFreshnessMs rejects non-positive', () => {
+  assert.equal(mergeConfig({ display: { orchestrationFreshnessMs: 0 } }).display.orchestrationFreshnessMs, 900000);
+  assert.equal(mergeConfig({ display: { orchestrationFreshnessMs: 60000 } }).display.orchestrationFreshnessMs, 60000);
+});

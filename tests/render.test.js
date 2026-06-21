@@ -757,6 +757,37 @@ test('renderProjectLine keeps the legacy trailing provider label when showProvid
   }
 });
 
+test('renderProjectLine shows ✦ superpowers badge with progress', () => {
+  const ctx = baseContext();
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'executing-plans', active: true, objective: '',
+    taskCounts: { total: 7, completed: 3, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(line.includes('✦ executing-plans 3/7'), `got: ${line}`);
+});
+
+test('renderProjectLine shows ⚙ omc badge', () => {
+  const ctx = baseContext();
+  ctx.orchestration = {
+    source: 'omc', mode: 'pdca', active: true, objective: '',
+    taskCounts: { total: 0, completed: 0, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(line.includes('⚙ pdca'), `got: ${line}`);
+});
+
+test('renderProjectLine hides badge when showOrchestration is false', () => {
+  const ctx = baseContext();
+  ctx.config.display.showOrchestration = false;
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'executing-plans', active: true, objective: '',
+    taskCounts: { total: 7, completed: 3, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(!line.includes('executing-plans'), `got: ${line}`);
+});
+
 test('renderSessionLine shows custom provider before the model when showProvider is on', () => {
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Claude Opus 4.6' };

@@ -70,10 +70,11 @@ function buildExtras(ctx) {
     if ((display?.showThinkingIndicator ?? true) && ctx.transcript.thinkingState?.active) {
         extras.push(thinkingColor('∿ thinking', colors));
     }
-    if ((display?.showOmcMode ?? true) && ctx.omcState?.active && ctx.omcState.mode) {
-        const { mode, taskCounts } = ctx.omcState;
+    if ((display?.showOrchestration ?? true) && ctx.orchestration?.active && ctx.orchestration.mode) {
+        const { source, mode, taskCounts } = ctx.orchestration;
+        const glyph = source === 'superpowers' ? '✦' : '⚙';
         const progress = taskCounts.total > 0 ? ` ${taskCounts.completed}/${taskCounts.total}` : '';
-        extras.push(dim(`⚙ ${sanitizeDisplayText(mode)}${progress}`));
+        extras.push(dim(`${glyph} ${sanitizeDisplayText(mode)}${progress}`));
     }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
         const { targetSummary, timestamp } = ctx.transcript.pendingPermission;

@@ -47,13 +47,12 @@ test('readOmcState reads an active mission with mode, progress, and agents', () 
   );
   const s = readOmcState(dir);
   assert.ok(s);
+  assert.equal(s.source, 'omc');
   assert.equal(s.mode, 'ralph');
   assert.equal(s.active, true);
   assert.equal(s.objective, 'Fix authentication regression');
   assert.deepEqual(s.taskCounts, { total: 5, completed: 2, inProgress: 1 });
-  assert.equal(s.agentsTotal, 3);
   assert.equal(s.agentsActive, 2); // 3 spawned - 1 completed - 0 failed
-  assert.equal(s.agentsCompleted, 1);
 });
 
 test('readOmcState treats a done mission as inactive', () => {

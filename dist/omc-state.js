@@ -1,5 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+/**
+ * Reads oh-my-claudecode (OMC) orchestration state from
+ * `<cwd>/.omc/state/mission-state.json` (+ `subagent-tracking.json`) and
+ * normalizes it into the shared `OrchestrationState` shape.
+ *
+ * The reader is fully defensive: any missing field, parse failure, or absent
+ * `.omc` directory yields `null` (or zeroed counts) rather than throwing. The
+ * statusline runs every ~300ms in a fresh process, so this stays a cheap,
+ * direct guarded read.
+ */
 const ACTIVE_STATUSES = new Set(['active', 'running', 'in_progress', 'in-progress']);
 function coerceNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -87,14 +97,12 @@ export function readOmcState(cwd) {
             }
         }
         return {
+            source: 'omc',
             mode,
-            status,
             active,
             objective: coerceString(mission.objective),
             taskCounts,
-            agentsTotal: subagents.total,
             agentsActive: subagents.active,
-            agentsCompleted: subagents.completed,
             updatedAt,
         };
     }

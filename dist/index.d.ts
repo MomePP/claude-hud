@@ -8,6 +8,7 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { readOmcState } from "./omc-state.js";
+import { readSuperpowersState } from "./superpowers-state.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
@@ -25,6 +26,7 @@ export type MainDeps = {
     getClaudeCodeVersion: typeof getClaudeCodeVersion;
     getMemoryUsage: typeof getMemoryUsage;
     readOmcState: typeof readOmcState;
+    readSuperpowersState: typeof readSuperpowersState;
     applyContextWindowFallback: typeof applyContextWindowFallback;
     render: typeof render;
     now: () => number;
