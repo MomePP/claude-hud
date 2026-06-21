@@ -4,6 +4,81 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-21 — MomePP fork (unified orchestration awareness — OMC + superpowers)
+
+Fork feature, no upstream sync. Reshapes the OMC-only orchestration awareness
+into a **unified, source-selectable** feature that also supports the
+[superpowers](https://github.com/obra/superpowers) plugin behind one shared
+`OrchestrationState` abstraction. Bumped **minor** (not patch) because it adds a
+new user-visible feature and a new config schema (the `orchestration*` keys),
+even though defaults preserve OMC behavior and old keys migrate. Built spec-first
+(`.claude/specs/`) and plan-first (`.claude/plans/`), TDD throughout.
+
+### Added — fork
+
+- **Unified orchestration config** (`src/config.ts`): `display.orchestrationSource`
+  (`auto`/`superpowers`/`omc`/`off`, default `auto`), `display.showOrchestration`
+  (default true), `display.showOrchestrationDetail` (default false),
+  `display.orchestrationFreshnessMs` (default 900000).
+- **Shared abstraction** `src/orchestration.ts` (`OrchestrationState`) produced by
+  both `readOmcState` and the new `readSuperpowersState`.
+- **Superpowers reader** `src/superpowers-state.ts`: phase = latest
+  `superpowers:<skill>` in the transcript (freshness-windowed); task counts
+  enriched by `<cwd>/.superpowers/sdd/progress.md`, else from todos; running-agent
+  count from the transcript.
+- **Transcript capture** (`src/transcript.ts`): `latestSuperpowersSkill { name, at }`
+  on `TranscriptData`; serialized through the cache (version 10→11).
+- **Source-driven resolution** `resolveOrchestration` in `src/index.ts` — `auto`
+  prefers superpowers then OMC; pinning skips the other reader's fs read.
+- **Inline badge** glyph by source: `✦` superpowers / `⚙` OMC, on the project line.
+- **Detail line** `src/render/orchestration-line.ts` (replaces `omc-line.ts`):
+  `✦`/`◆ <mode>: <objective> (c/t) · N agents`.
+- New test suite `tests/superpowers-state.test.js`; config-migration + render tests.
+
+### Changed — fork
+
+- `RenderContext.omcState` → `RenderContext.orchestration` (`src/types.ts`).
+- `readOmcState` now returns the shared `OrchestrationState` (`source: 'omc'`)
+  instead of the old `OmcState` shape (`src/omc-state.ts`).
+- Project-line badge is source-agnostic (`src/render/lines/project.ts`).
+- `tests/omc-state.test.js` adapted to the `OrchestrationState` shape.
+
+### Migration (existing config compatibility)
+
+- Legacy `display.showOmcMode` → `showOrchestration`, `display.showOmcState` →
+  `showOrchestrationDetail`, read as fallback in `mergeConfig` when the new keys
+  are absent. New keys win when both are present. `orchestrationSource` defaults
+  to `auto`, which still resolves OMC for an OMC user.
+
+### Skipped (per fork direction)
+
+- No upstream changes in this release (fork-only feature).
+- OMC support is **not** removed — kept dormant and selectable (`orchestrationSource:
+  "omc"` / `auto`), honoring the fork's "OMC must survive" doctrine while extending it.
+- Default colors stay pinned; `colors.thinking`/`colors.duration` and optional bar
+  chars unchanged.
+
+### Default-behavior changes visible on update
+
+- OMC users on defaults: no visible change (`auto` resolves OMC; `showOrchestration`
+  defaults true; legacy keys migrate). The inline OMC badge still renders `⚙ <mode>`.
+- superpowers users: with `orchestrationSource: "superpowers"` (or `auto`), the
+  project line now shows a `✦ <phase> c/t` badge when a `superpowers:` skill is
+  recently active.
+
+### Tests
+
+- 882 passed, 0 failed (`npm test`). New `tests/superpowers-state.test.js` covers
+  transcript phase capture + the reader (freshness, progress.md parse, todos
+  fallback, null cases). Fork OMC suites (`tests/omc-state.test.js`,
+  `tests/transcript-omc.test.js`) still green against the unified shape.
+
+### Bumped
+
+- `package.json` → `0.8.0`
+- `.claude-plugin/plugin.json` → `0.8.0`
+- `.claude-plugin/marketplace.json` → `0.8.0`
+
 ## [0.7.0] - 2026-06-21 — MomePP fork (upstream 0.3.0 sync — advisor, skills/MCP, compactions, provider-before-model)
 
 Upstream sync via rebase-reconstruct onto upstream `b83b445` (release 0.3.0). The
