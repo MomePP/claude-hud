@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Personal fork of claude-hud — OMC-tuned (oh-my-claudecode orchestration awareness), OAC-compatible, cross-platform (Windows experimental), built-in launcher scripts",
-    "version": "0.6.1"
+    "version": "0.7.0"
   },
   "plugins": [
     {

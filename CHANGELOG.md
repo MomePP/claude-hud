@@ -4,6 +4,103 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-21 — MomePP fork (upstream 0.3.0 sync — advisor, skills/MCP, compactions, provider-before-model)
+
+Upstream sync via rebase-reconstruct onto upstream `b83b445` (release 0.3.0). The
+fork's previous base (`b293c9f`) predated *every* upstream tagged release, so this
+single sync absorbs upstream 0.1.0 → 0.1.1 → 0.2.0 → 0.2.1 → 0.3.0 — ~27 feature/fix
+commits. Bumped **minor** (not patch) because new elements (`skills`, `mcp`) join
+`DEFAULT_ELEMENT_ORDER` and `addedDirs` is now ordered explicitly; although all new
+display lines are opt-in (default `false`), the element-order default and the
+provider-before-model option are user-visible schema changes. `TRANSCRIPT_CACHE_VERSION`
+bumped 5 → 10 (past upstream's 9) to invalidate caches written under both older parse
+semantics.
+
+### Added — from upstream
+
+- **Advisor model line** — `display.showAdvisor` + `display.advisorOverride` (capped 80).
+  Renders `Advisor: Opus 4.7` inline on the project line. New `src/render/lines/advisor.ts`;
+  transcript captures the `advisorModel` field stamped on assistant records.
+- **Skills/MCP activity** — `display.showSkills` / `display.showMcp` + `skills` / `mcp`
+  HUD elements. New `src/render/skills-mcp-line.ts`; transcript captures active Skill
+  invocations and MCP server names (`normalizeSkillName` / `extractMcpServerName`).
+- **Session compaction count** — `display.showCompactions`. New `src/render/lines/compactions.ts`;
+  transcript counts `compact_boundary` markers.
+- **Provider-before-model** — `display.showProvider` + `display.providerName` (capped 40),
+  via new `src/render/model-display.ts` (`formatModelDisplay`).
+- **autoCompactWindow** — `display.autoCompactWindow` (validated positive int) as the
+  context-percentage / token-display denominator, matching `/context`.
+- **`balance_label`** rendered alongside stdin `rate_limits`; external usage snapshot can
+  also serve fallback windows when stdin is missing.
+- **Fallback speed estimation** via transcript file growth (`src/speed-tracker.ts`).
+- **`CLAUDE_HUD_DISABLE`** env kill-switch to disable the HUD.
+- **Shared `src/utils/`** — `format.ts`, `hyperlinks.ts`, `sanitize.ts`, `truncate.ts`
+  (upstream's dedup refactor).
+- i18n: Simplified-Chinese "token" → 词元; new `label.advisor` key (en + zh-Hans).
+- Debug logging in previously-silent catch blocks (`createDebug`).
+
+### Changed — fork
+
+- `src/render/lines/project.ts` — adopted `formatModelDisplay(model, ctx)` in the pipes
+  renderer (a superset of the fork's trailing-provider + effort logic: identical output
+  when `showProvider` is off). Advisor inlined in both pipes and natural renderers.
+- `src/transcript.ts` — `extractTarget` `case 'Bash'` now collapses whitespace before
+  truncating (multiline commands render as one line).
+- Opus 4.5 pricing corrected (`src/cost.ts`); `--extra-cmd` now requires opt-in
+  (`CLAUDE_HUD_ALLOW_EXTRA_CMD`); cache-file permission hardening — all from upstream,
+  adopted as-is.
+
+### Conflict resolutions (kept fork features intact)
+
+- `src/transcript.ts` — `--ours` then **surgical graft** into the fork's `handleLine`
+  closure: advisor capture inside the assistant block, `compactionCount += 1` in the
+  fork's top-level `compact_boundary` block, skill/MCP capture in `processEntry` (signature
+  +`skillSet, mcpServerSet`; capture keyed on the fork's proxy-stripped `canonicalName`),
+  plus serialize/deserialize round-trip (`normalizeNameList`). All three background-agent
+  completion signals, thinkingState, pendingPermission, 4MB tail read preserved.
+- `src/config.ts` — unioned upstream's `showAdvisor` / `advisorOverride` / `autoCompactWindow`
+  into the interface, `DEFAULT_CONFIG`, and `mergeConfig`; kept fork pins (default colors,
+  `colors.thinking` / `colors.duration`, optional bar chars, `agentNamespaceMode`, OMC flags).
+- `src/git.ts` — `--ours` (fork's sentinel-cache + parallel-spawn rewrite); upstream's
+  catch-block debug logging didn't fit the `allSettled` structure and was dropped.
+- `src/stdin.ts`, `src/render/agents-line.ts` — unions (cwd fallback + debug; `formatNamespaced`
+  + shared `truncateString`).
+- `commands/setup.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — `--ours`
+  (fork launcher + branding). `README.md` — kept fork annotations, added new option rows,
+  added the upstream Security Notes section. `CHANGELOG.md` — `--ours` + this entry.
+
+### Skipped (per fork direction)
+
+- **No `.github/workflows/`** — upstream CI workflows rejected (fork has no CI).
+- **Launcher-based setup kept fork-only** — `commands/setup.md` `--ours`; upstream's inline
+  dynamic one-liner not adopted.
+- **Default colors stay pinned** — `model: green`, `project: cyan`, `gitBranch: brightMagenta`.
+- **`colors.barFilled?` / `colors.barEmpty?` stay optional** (`string | undefined`).
+- **`colors.thinking` / `colors.duration` stay** as independent overrides.
+- Upstream's git.ts catch-block debug logging (incompatible with the fork's `allSettled` rewrite).
+
+### Default-behavior changes visible on update
+
+- `DEFAULT_ELEMENT_ORDER` now includes `addedDirs`, `skills`, `mcp`. Existing configs with an
+  explicit `elementOrder` are unaffected; users on defaults see `addedDirs` ordering formalized
+  (skills/mcp render only when their opt-in flags are set).
+- When `display.showProvider` is **off** (default), provider display is byte-identical to before
+  (`[Opus 4.6 | Bedrock]`). No other visible change unless an opt-in flag is enabled.
+
+### Tests
+
+- 866 passed, 0 failed, 0 skipped (`npm test`). Upstream's new coverage suites
+  (`*-coverage.test.js`, render/usage/version/identity/memory/session-tokens) came along.
+  Two upstream provider tests and one multiline-Bash test drove fork code changes
+  (`formatModelDisplay` adoption, Bash whitespace-collapse) rather than test deletion.
+  Fork-specific `tests/transcript-omc.test.js` still green.
+
+### Bumped
+
+- `package.json` → `0.7.0`
+- `.claude-plugin/plugin.json` → `0.7.0`
+- `.claude-plugin/marketplace.json` → `0.7.0`
+
 ## [0.6.1] - 2026-06-02 — MomePP fork (git-status cache invalidation fixes)
 
 Fork-only bugfix. No upstream sync. The mtime-sentinel git-status cache (the
