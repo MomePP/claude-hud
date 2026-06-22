@@ -2,7 +2,7 @@
 
 A Claude Code plugin that shows what's happening — context usage, active tools, running agents, and todo progress. Always visible below your input.
 
-**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned primarily for [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC) on Claude Code — including OMC orchestration awareness (active-mode indicator, `.omc` mission state) — with leftover compatibility for [OpenAgentsControl](https://github.com/openagentscontrol/oac) (OAC). If you're looking for the upstream, go there — this one is deliberately narrower in scope.
+**Personal fork** of [jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud), tuned for orchestration-aware workflows on Claude Code. It adds **unified, source-selectable orchestration awareness** — a project-line phase/mode badge for [superpowers](https://github.com/obra/superpowers) (`✦ <phase> c/t`) and [oh-my-claudecode](https://github.com/pangussion/oh-my-claudecode) (OMC, `⚙ <mode> c/t`), chosen via `display.orchestrationSource` — plus leftover compatibility for [OpenAgentsControl](https://github.com/openagentscontrol/oac) (OAC). If you're looking for the upstream, go there — this one is deliberately narrower in scope.
 
 ![Claude HUD in action](claude-hud-preview-5-2.png)
 
@@ -19,6 +19,7 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 | CI builds + auto-commits `dist/` after each merge | **No CI** — `dist/` is committed directly; run `npm run build` before committing |
 | Setup writes a 240-character dynamic bash one-liner into `settings.json` | Ships launcher scripts (`scripts/claude-hud.sh`, `scripts/claude-hud.ps1`); `settings.json` just points at the one for your shell |
 | — | Inline project-line indicators: thinking (`∿ thinking`), pending permission (`? target (waiting Ns)`), and last-request tokens (`last: 12k→678`, with `(+Xk)` when reasoning tokens are present) |
+| — | **Unified orchestration awareness.** A source-selectable phase/mode badge on the project line: `✦ <phase> c/t` for [superpowers](https://github.com/obra/superpowers) (phase = the transcript's latest `superpowers:<skill>`; task counts from `<cwd>/.superpowers/sdd/progress.md` or todos) or `⚙ <mode> c/t` for OMC (read from `<cwd>/.omc/state/`). `display.orchestrationSource` (`auto`/`superpowers`/`omc`/`off`) picks the ecosystem; `display.showOrchestration` toggles the inline badge and `display.showOrchestrationDetail` an optional detail line. Legacy `showOmcMode`/`showOmcState` migrate automatically |
 | Dropped `colors.thinking` and `colors.duration` overrides — the inline thinking glyph and session-duration token now share the generic label color | Keeps `colors.thinking` and `colors.duration` as independent overrides so the `∿ thinking` glyph and the `<glyph> 1h 30m` duration token can be themed separately from `Context` / `Usage` labels |
 | `colors.barFilled` / `colors.barEmpty` are required strings — overriding either forces a custom character set even when `display.barStyle` is set, and dropping them from the config silently falls back to upstream defaults | `colors.barFilled?` / `colors.barEmpty?` are **optional** — when unset, `display.barStyle` controls bar characters end-to-end. Set either explicitly only for fine-grained per-character overrides without losing the style preset |
 | Default colors `model: cyan`, `project: yellow`, `gitBranch: cyan` (starship-aligned) | Keeps the earlier fork defaults `model: green`, `project: cyan`, `gitBranch: brightMagenta` — change-on-merge would re-theme every existing fork user's HUD, so they stay pinned |
@@ -28,11 +29,11 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 - **Windows is experimental.** As of 0.5.0 the fork ships a PowerShell launcher (`scripts/claude-hud.ps1`) and Windows setup instructions, and the runtime is cross-platform (path handling, `.cmd`/`.bat` version probing, etc.). But the maintainer develops on macOS/Linux and runs **no CI**, so Windows is untested and best-effort — report breakage via an issue. On Windows + Git Bash, use the `.sh` launcher.
 - **No automated CI.** Tests and builds run locally. Dependency bumps won't be auto-gated; you're on your own to verify.
 - **Remember to rebuild.** `dist/` is tracked — run `npm run build` before committing source changes so the shipped bundle stays in sync.
-- **Upstream drift.** Not a live mirror. The fork is periodically **rebased onto the current upstream base** — upstream as the root, fork patches replayed cleanly on top, linear history — rather than merged (which would leave `main` carrying both lineages). Most recently synced to upstream [`be9902a`](https://github.com/jarrodwatts/claude-hud) (2026-05), adopting its session-token dedup, BCP-47 language tags (`zh`→`zh-Hans`), and OSC 8 truncation fix. See `CLAUDE.md` → "Merging from Upstream" for the procedure.
+- **Upstream drift.** Not a live mirror. The fork is periodically **rebased onto the current upstream base** — upstream as the root, fork patches replayed cleanly on top, linear history — rather than merged (which would leave `main` carrying both lineages). Most recently synced to upstream [`b83b445`](https://github.com/jarrodwatts/claude-hud) (release 0.3.0, landed in fork 0.7.0), adopting the advisor line, skills/MCP activity, session-compaction count, provider-before-model, `autoCompactWindow`, and `balance_label`. See `CLAUDE.md` → "Merging from Upstream" for the procedure.
 
 ## Install
 
-> **Latest release: [v0.6.0](https://github.com/MomePP/claude-hud/releases/tag/v0.6.0).** `/plugin install` always pulls the newest version from the marketplace — no version pinning needed.
+> **Latest release: [v0.8.0](https://github.com/MomePP/claude-hud/releases/tag/v0.8.0).** `/plugin install` always pulls the newest version from the marketplace — no version pinning needed.
 
 ```
 /plugin marketplace add MomePP/claude-hud
@@ -64,6 +65,7 @@ Claude HUD gives you better insights into what's happening in your Claude Code s
 | **Tool activity** | Watch Claude read, edit, and search files as it happens |
 | **Agent tracking** | See which subagents are running and what they're doing |
 | **Todo progress** | Track task completion in real-time |
+| **Orchestration phase** | See your superpowers/OMC workflow phase and task progress at a glance (`✦ executing-plans 3/7`) |
 
 ## What You See
 
@@ -72,14 +74,17 @@ Claude HUD gives you better insights into what's happening in your Claude Code s
 [Opus] │ my-project git:(main*)
 Context █████░░░░░ 45% │ Usage ██░░░░░░░░ 25% (1h 30m / 5h)
 ```
-- **Line 1** — Model, provider label when positively identified (for example `Bedrock`), project path, git branch
+- **Line 1** — Model, provider label when positively identified (for example `Bedrock`), project path, git branch, and an orchestration phase badge when active (`✦ executing-plans 3/7` for superpowers, `⚙ <mode> 2/5` for OMC)
 - **Line 2** — Context bar (green → yellow → red) and usage rate limits
+
+The orchestration badge folds "current phase + task progress" onto line 1, so a 2-line layout stays informative even with the tools/agents/todos lines off (Claude Code shows agents and todos natively).
 
 ### Optional lines (enable via `/claude-hud:configure`)
 ```
-◐ Edit: auth.ts | ✓ Read ×3 | ✓ Grep ×2        ← Tools activity
-◐ explore [haiku]: Finding auth code (2m 15s)    ← Agent status
-▸ Fix authentication bug (2/5)                   ← Todo progress
+◐ Edit: auth.ts | ✓ Read ×3 | ✓ Grep ×2          ← Tools activity
+◐ explore [haiku]: Finding auth code (2m 15s)     ← Agent status
+▸ Fix authentication bug (2/5)                    ← Todo progress
+✦ executing-plans: credit-accounts (3/7) · 2 agents  ← Orchestration detail (showOrchestrationDetail)
 ```
 
 ---
@@ -415,7 +420,7 @@ node --test tests/transcript-omc.test.js
 ## Credit
 
 All of the HUD rendering, configuration flow, preset logic, and design choices come from
-[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork is a thin layer of orchestrator-compat fixes (primarily for OMC on Claude Code, secondarily for OAC) and perf tweaks on top.
+[jarrodwatts/claude-hud](https://github.com/jarrodwatts/claude-hud). This fork adds orchestration awareness (superpowers + OMC), orchestrator-compat fixes (OMC, OAC), and perf tweaks on top.
 
 ## License
 
