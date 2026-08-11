@@ -4,6 +4,154 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-11 — MomePP fork (upstream sync onto 6f065f2, post-0.7.0)
+
+Rebase-reconstruct of the fork onto the current upstream base, replacing the 0.3.0
+(`b83b445`) root with upstream `6f065f2` — 80 upstream commits spanning releases 0.4.0
+through 0.7.0 plus six unreleased. **Minor, not patch**: the sync adds a substantial set
+of new user-facing options (jj status, `projectLineOrder`, `pathLevels: "full"`,
+`display.rightAlign`, auth display, `modelSource`, wall-clock hour-cycle controls). It is
+**not** major because every new option defaults to off/neutral — no existing fork user's
+HUD changes appearance on update.
+
+### Added — from upstream
+
+- **jj (Jujutsu) status** — `jjStatus.enabled` (default `false`), `jjStatus.showDirty`,
+  `jjStatus.showConflicts`. New `src/jj.ts` and `src/render/vcs-status.ts`; when enabled
+  and a real `.jj` directory is present, jj replaces git for that repo (never both), and
+  the branch badge renders `jj:(…)` with an optional `!conflict` marker (#685).
+- **`projectLineOrder`** (`string[]`, default `[]`) — reorders first-line segments
+  (`model`, `project`, `advisor`, `sessionName`, `version`, `extra`, `duration`, `cost`,
+  `speed`, `auth`). New `src/render/first-line-order.ts` (#680).
+- **`pathLevels: "full"`** — show the entire absolute cwd instead of the last 3 segments.
+  New `src/render/project-path.ts` handles POSIX/Windows/UNC forms with control- and
+  bidi-character stripping (#678).
+- **`display.rightAlign`** (`string[]`, default `[]`) — right-aligns an ordered suffix of
+  merged expanded rows (#693).
+- **Auth display** — `display.showAuth`, `display.showAuthUser`, `display.authUserLength`
+  (all off by default). New `src/auth.ts`, with derived labels cached against the source
+  profile's mtime + size (#652, #700).
+- **`display.modelSource`** (`stdin` | `auto` | `transcript`, default `stdin`) — proxy
+  users can source the model name from the transcript. New `src/model-source.ts` (#643).
+- **Traditional Chinese** — `zh-Hant` / `zh-TW` locale (`src/i18n/zh-Hant.ts`) (#645).
+- **`display.showRoutedCost`** (default `false`) — opt into cost display for Bedrock and
+  Vertex sessions, with explicit native (`Cost`) vs estimated (`Est.`) labeling (#648).
+- **Claude 5 and MiniMax pricing** — Opus 5, Sonnet 5 (incl. the time-limited
+  introductory rate) and Fable 5 in local cost estimates; official MiniMax
+  Anthropic-compatible endpoints get a `MiniMax` provider label and M2.7 token/cache
+  pricing (M3's context-tier pricing is deliberately not guessed) (#694, #696).
+- **MCP error reporting** — failing MCP servers surface on the environment line when MCP
+  activity or config counts are enabled, clearing after a later successful result (#699).
+- **`display.hourCycle`** (`auto`|`h11`|`h12`|`h23`|`h24`) and
+  **`display.showClockSeconds`** — wall-clock reset-time formatting (#692).
+- **Model-scoped weekly usage windows** — rendered from stdin in both layouts, and
+  accepted from the external usage snapshot's `model_scoped` field (#669, #690).
+- **`scripts/clean-dist.mjs`** — clears `dist/` before every build; `tests/build-output.test.js`
+  enforces source↔artifact parity so removed modules can't linger in a release (#670).
+- **Transcript captures** — ultracode effort state (`ultracode(xhigh)`), the last
+  assistant model, and agent `toolUseResult.resolvedModel` (#640, #679).
+- **Setup Step 4.5** — offers a `statusLine.refreshInterval` (5s recommended / 1s / none)
+  so time-based HUD data stays current between interactions (#682, hand-ported).
+
+### Changed — fork
+
+- `src/git.ts` — every git invocation now routes through upstream's `createGitRunner`
+  (`src/git-runner.ts` + `src/windows-git-worker.ts`), which prevents short-lived Windows
+  statusline processes from orphaning their git process trees and adds bounded output,
+  timeouts, and non-interactive read-only git behavior (#703). The fork's sentinel-based
+  status cache and parallel Stage A (`Promise.allSettled` over 4 commands) are retained —
+  the runner multiplexes by request id, so concurrency stays safe on Windows.
+- `src/git.ts` — grafted `resolveGitRef` / `buildGitHubRefUrl`: detached HEAD now shows an
+  exact tag when one exists, else `detached:<short sha>`, and slash-separated branch names
+  survive into GitHub branch links (#664).
+- `src/transcript.ts` — assistant token usage now dedups on `message.id` with a high-water
+  mark per message, so Claude Code's dual-logged and zero-then-grow streaming placeholders
+  each count exactly once; records without a usable ID keep the previous consecutive
+  usage-fingerprint fallback (#646, #698). `TRANSCRIPT_CACHE_VERSION` 11 → **16** (past
+  upstream's 15) so neither lineage's stale caches survive.
+- `src/render/lines/project.ts` — both renderers moved onto `getVcsDisplayState`, so jj
+  never inherits git-only ahead/behind or file-stat settings. `buildExtras` now returns
+  keyed `FirstLinePart`s so `projectLineOrder` applies to pipes and compact layouts.
+- **New divergence**: `projectLineOrder` does **not** apply to
+  `display.projectStyle: "natural"`. Natural style composes prose (`… in X on Y`), so
+  permuting its segments would break the grammar; it keeps its fixed order.
+
+### Conflict resolutions (kept fork features intact)
+
+- `commands/setup.md` — taken wholesale from the fork (launcher-based setup); upstream's
+  inline-one-liner changes rejected, and only the orthogonal #682 refreshInterval step
+  hand-ported as Step 4.5.
+- `src/config.ts` — fork side for the pinned default colors, optional `colors.barFilled` /
+  `colors.barEmpty`, and `colors.thinking` / `colors.duration`; upstream side for
+  `jjStatus`, `projectLineOrder`, `hourCycle`, `showClockSeconds`, `modelSource`, auth and
+  routed-cost flags. `validateMaxWidth` now clamps to `MAX_TERMINAL_WIDTH` (upstream's
+  hostile-width cap) while keeping the fork's validator shape.
+- `src/transcript.ts` — resolved as `--ours`, then upstream's logic grafted into the
+  fork's `handleLine` closure. All three background-agent completion signals verified
+  intact: `<task-notification status="completed">` (OAC), `queue-operation` enqueue
+  (upstream), and `tool_result` timestamp (foreground fallback).
+- `src/render/session-line.ts` — the fork's inline indicators (thinking, pending
+  permission, last-request tokens, natural-style duration) re-expressed against upstream's
+  new keyed `push(text, key)` API rather than dropped.
+- `src/types.ts`, `src/index.ts` — additive on both sides; `latestSuperpowersSkill` and the
+  orchestration wiring sit alongside upstream's `authInfo`, `mcpErrors`, `ultracodeActive`,
+  `lastAssistantModel`, and `resolveVcsStatus`.
+- `package.json` — the fork's esbuild bundle step retained, now prefixed with upstream's
+  `node scripts/clean-dist.mjs`.
+
+### Skipped (per fork direction)
+
+- `.github/workflows/*` (4 files) and `.github/dependabot.yml` — the fork runs no CI.
+  Note these merge in **silently** (upstream-modified `ci.yml` conflicts; the rest
+  auto-apply), so they must be removed explicitly during a sync.
+- Upstream's inline dynamic one-liner setup — the fork ships per-platform launcher
+  scripts (`scripts/claude-hud.sh`, `scripts/claude-hud.ps1`) that `settings.json` points at.
+- Upstream's re-theme of default colors — `model: green`, `project: cyan`,
+  `gitBranch: brightMagenta` stay pinned.
+- Required `colors.barFilled` / `colors.barEmpty` — they stay optional so
+  `display.barStyle` controls bar characters end-to-end.
+- Consolidating `colors.thinking` / `colors.duration` into `colors.label`.
+
+### Default-behavior changes visible on update
+
+None. Every option adopted this sync defaults to off or neutral (`jjStatus.enabled: false`,
+`projectLineOrder: []`, `rightAlign: []`, `showAuth: false`, `modelSource: "stdin"`,
+`pathLevels: 1`, `hourCycle: "auto"`, `showRoutedCost: false`). Fork pins verified after
+the merge: `model: green` / `project: cyan` / `gitBranch: brightMagenta`, `barFilled` and
+`barEmpty` both `undefined`, `colors.thinking` and `colors.duration` present, orchestration
+defaults unchanged (`auto` / `true` / `false`).
+
+Existing sessions will re-parse their transcript once, because
+`TRANSCRIPT_CACHE_VERSION` moved to 16.
+
+### Tests
+
+1128 tests, **1122 passing, 0 failing, 6 skipped**. `npm run build` clean, `tsc --noEmit`
+clean, and `dist/` reproduces byte-identically from a clean build.
+
+Fork-specific suites still cover what they did before: `tests/transcript-omc.test.js`
+(proxy_ stripping, background-agent signals), `tests/omc-state.test.js` and
+`tests/superpowers-state.test.js` (orchestration readers), `tests/project-indicators.test.js`
+(thinking / pending-permission / last-request-token indicators), `tests/mcp-tool-name.test.js`.
+
+Two upstream tests were adapted rather than accepted verbatim:
+
+- `tests/setup-command.test.js` — upstream asserts `/dev/tty` probe ordering inside the
+  inline one-liners in `commands/setup.md`. The fork has no inline one-liners; its probe
+  lives in `scripts/claude-hud.sh`, so the test follows it there. The launcher's
+  brace-grouped `{ stty size </dev/tty; } 2>/dev/null` is stricter than upstream's form —
+  it also silences stderr from a failing redirection itself.
+- `tests/render.test.js` — the agent-model assertion expected lowercase `general-purpose`;
+  relaxed to `General-purpose` for the fork's `display.agentNamespaceMode: "strip"`
+  capitalization. The assertion's subject (the compacted `[sonnet-5]` model label) is
+  unchanged.
+
+### Bumped
+
+- `package.json` → `0.9.0`
+- `.claude-plugin/plugin.json` → `0.9.0`
+- `.claude-plugin/marketplace.json` → `metadata.version: 0.9.0`
+
 ## [0.8.0] - 2026-06-21 — MomePP fork (unified orchestration awareness — OMC + superpowers)
 
 Fork feature, no upstream sync. Reshapes the OMC-only orchestration awareness

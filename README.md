@@ -34,7 +34,7 @@ A Claude Code plugin that shows what's happening — context usage, active tools
 
 ## Install
 
-> **Latest release: [v0.8.0](https://github.com/MomePP/claude-hud/releases/tag/v0.8.0).** `/plugin install` always pulls the newest version from the marketplace — no version pinning needed.
+> **Latest release: [v0.9.0](https://github.com/MomePP/claude-hud/releases/tag/v0.9.0).** `/plugin install` always pulls the newest version from the marketplace — no version pinning needed.
 
 ```
 /plugin marketplace add MomePP/claude-hud
