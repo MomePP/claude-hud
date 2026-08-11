@@ -6,7 +6,6 @@ import {
   mergeConfig,
   DEFAULT_CONFIG,
   DEFAULT_ELEMENT_ORDER,
-  DEFAULT_MERGE_GROUPS,
   DEFAULT_PROJECT_LINE_ORDER,
 } from '../dist/config.js';
 import * as path from 'node:path';
@@ -23,7 +22,17 @@ function restoreEnvVar(name, value) {
 }
 
 test('loadConfig returns valid config structure', async () => {
-  const config = await loadConfig();
+  // Use a temp dir so the test is isolated from any real user config file.
+  const tmpDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-test-'));
+  const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = tmpDir;
+  let config;
+  try {
+    config = await loadConfig();
+  } finally {
+    restoreEnvVar('CLAUDE_CONFIG_DIR', originalConfigDir);
+    await rm(tmpDir, { recursive: true, force: true });
+  }
 
   // pathLevels must be 1, 2, 3, or 'full'
   assert.ok([1, 2, 3, 'full'].includes(config.pathLevels), 'pathLevels should be 1, 2, 3, or "full"');
@@ -34,7 +43,6 @@ test('loadConfig returns valid config structure', async () => {
 
   // showSeparators must be boolean
   assert.equal(typeof config.showSeparators, 'boolean', 'showSeparators should be boolean');
-  assert.ok(config.maxWidth === null || (typeof config.maxWidth === 'number' && config.maxWidth > 0), 'maxWidth should be null or a positive number');
   assert.ok(Array.isArray(config.elementOrder), 'elementOrder should be an array');
   assert.ok(config.elementOrder.length > 0, 'elementOrder should not be empty');
   assert.deepEqual(config.elementOrder, DEFAULT_ELEMENT_ORDER, 'elementOrder should default to the full expanded layout');
@@ -44,7 +52,6 @@ test('loadConfig returns valid config structure', async () => {
   assert.equal(typeof config.gitStatus.enabled, 'boolean');
   assert.equal(typeof config.gitStatus.showDirty, 'boolean');
   assert.equal(typeof config.gitStatus.showAheadBehind, 'boolean');
-  assert.ok(['truncate', 'wrap'].includes(config.gitStatus.branchOverflow), 'branchOverflow should be valid');
   assert.equal(typeof config.gitStatus.pushWarningThreshold, 'number');
   assert.equal(typeof config.gitStatus.pushCriticalThreshold, 'number');
 
@@ -71,8 +78,6 @@ test('loadConfig returns valid config structure', async () => {
   assert.equal(typeof config.display.showSessionName, 'boolean');
   assert.equal(typeof config.display.showClaudeCodeVersion, 'boolean');
   assert.equal(typeof config.display.showMemoryUsage, 'boolean');
-  assert.equal(typeof config.display.showPromptCache, 'boolean');
-  assert.equal(typeof config.display.promptCacheTtlSeconds, 'number');
   assert.equal(typeof config.display.showCost, 'boolean');
   assert.equal(typeof config.display.showRoutedCost, 'boolean');
   assert.equal(typeof config.display.showOutputStyle, 'boolean');
@@ -175,34 +180,6 @@ test('mergeConfig preserves explicit showMemoryUsage=true', () => {
   assert.equal(config.display.showMemoryUsage, true);
 });
 
-test('mergeConfig defaults showPromptCache to false', () => {
-  const config = mergeConfig({});
-  assert.equal(config.display.showPromptCache, false);
-  assert.equal(DEFAULT_CONFIG.display.showPromptCache, false);
-});
-
-test('mergeConfig preserves explicit showPromptCache=true', () => {
-  const config = mergeConfig({ display: { showPromptCache: true } });
-  assert.equal(config.display.showPromptCache, true);
-});
-
-test('mergeConfig defaults promptCacheTtlSeconds to 300', () => {
-  const config = mergeConfig({});
-  assert.equal(config.display.promptCacheTtlSeconds, 300);
-  assert.equal(DEFAULT_CONFIG.display.promptCacheTtlSeconds, 300);
-});
-
-test('mergeConfig preserves valid promptCacheTtlSeconds values', () => {
-  const config = mergeConfig({ display: { promptCacheTtlSeconds: 3600 } });
-  assert.equal(config.display.promptCacheTtlSeconds, 3600);
-});
-
-test('mergeConfig falls back to default promptCacheTtlSeconds for invalid values', () => {
-  assert.equal(mergeConfig({ display: { promptCacheTtlSeconds: 0 } }).display.promptCacheTtlSeconds, 300);
-  assert.equal(mergeConfig({ display: { promptCacheTtlSeconds: -1 } }).display.promptCacheTtlSeconds, 300);
-  assert.equal(mergeConfig({ display: { promptCacheTtlSeconds: 'fast' } }).display.promptCacheTtlSeconds, 300);
-});
-
 test('mergeConfig defaults showCost to false', () => {
   const config = mergeConfig({});
   assert.equal(config.display.showCost, false);
@@ -216,7 +193,6 @@ test('mergeConfig preserves explicit showCost=true', () => {
 
 test('mergeConfig defaults git push thresholds to disabled', () => {
   const config = mergeConfig({});
-  assert.equal(config.gitStatus.branchOverflow, 'truncate');
   assert.equal(config.gitStatus.pushWarningThreshold, 0);
   assert.equal(config.gitStatus.pushCriticalThreshold, 0);
 });
@@ -323,7 +299,6 @@ test('mergeConfig falls back to truncate for invalid git branch overflow values'
   assert.equal(mergeConfig({ gitStatus: { branchOverflow: 'full' } }).gitStatus.branchOverflow, 'truncate');
   assert.equal(mergeConfig({ gitStatus: { branchOverflow: null } }).gitStatus.branchOverflow, 'truncate');
 });
-
 test('mergeConfig defaults showOutputStyle to false', () => {
   const config = mergeConfig({});
   assert.equal(config.display.showOutputStyle, false);
@@ -434,26 +409,6 @@ test('mergeConfig falls back to empty for non-string modelOverride', () => {
   assert.equal(mergeConfig({ display: { modelOverride: 123 } }).display.modelOverride, '');
   assert.equal(mergeConfig({ display: { modelOverride: null } }).display.modelOverride, '');
   assert.equal(mergeConfig({ display: { modelOverride: true } }).display.modelOverride, '');
-});
-
-test('mergeConfig defaults maxWidth to null', () => {
-  const config = mergeConfig({});
-  assert.equal(config.maxWidth, null);
-});
-
-test('mergeConfig preserves valid maxWidth', () => {
-  assert.equal(mergeConfig({ maxWidth: 50 }).maxWidth, 50);
-  assert.equal(mergeConfig({ maxWidth: 80 }).maxWidth, 80);
-  assert.equal(mergeConfig({ maxWidth: 30.7 }).maxWidth, 30);
-});
-
-test('mergeConfig rejects invalid maxWidth', () => {
-  assert.equal(mergeConfig({ maxWidth: 0 }).maxWidth, null);
-  assert.equal(mergeConfig({ maxWidth: -10 }).maxWidth, null);
-  assert.equal(mergeConfig({ maxWidth: NaN }).maxWidth, null);
-  assert.equal(mergeConfig({ maxWidth: 'wide' }).maxWidth, null);
-  assert.equal(mergeConfig({ maxWidth: null }).maxWidth, null);
-  assert.equal(mergeConfig({ maxWidth: Infinity }).maxWidth, null);
 });
 
 test('getConfigPath respects CLAUDE_CONFIG_DIR', async () => {
@@ -602,46 +557,6 @@ test('mergeConfig defaults elementOrder to the full expanded layout', () => {
   assert.deepEqual(config.elementOrder, DEFAULT_ELEMENT_ORDER);
 });
 
-test('mergeConfig defaults mergeGroups to context and usage', () => {
-  const config = mergeConfig({});
-  assert.deepEqual(config.display.mergeGroups, DEFAULT_MERGE_GROUPS);
-  assert.deepEqual(DEFAULT_CONFIG.display.mergeGroups, DEFAULT_MERGE_GROUPS);
-});
-
-test('mergeConfig preserves explicit empty mergeGroups to disable merged lines', () => {
-  const config = mergeConfig({
-    display: {
-      mergeGroups: [],
-    },
-  });
-  assert.deepEqual(config.display.mergeGroups, []);
-});
-
-test('mergeConfig accepts valid mergeGroups and filters invalid entries', () => {
-  const config = mergeConfig({
-    display: {
-      mergeGroups: [
-        ['project', 'context', 'usage'],
-        ['tools', 'todos', 'tools'],
-        ['memory'],
-        ['agents', 'unknown', 'environment'],
-      ],
-    },
-  });
-
-  assert.deepEqual(config.display.mergeGroups, [
-    ['project', 'context', 'usage'],
-    ['tools', 'todos'],
-    ['agents', 'environment'],
-  ]);
-});
-
-test('mergeConfig falls back to default mergeGroups when value is invalid', () => {
-  assert.deepEqual(mergeConfig({ display: { mergeGroups: 'context,usage' } }).display.mergeGroups, DEFAULT_MERGE_GROUPS);
-  assert.deepEqual(mergeConfig({ display: { mergeGroups: [['context'], ['unknown']] } }).display.mergeGroups, DEFAULT_MERGE_GROUPS);
-  assert.deepEqual(mergeConfig({ display: { mergeGroups: [null] } }).display.mergeGroups, DEFAULT_MERGE_GROUPS);
-});
-
 test('mergeConfig preserves valid custom elementOrder including activity elements', () => {
   const config = mergeConfig({
     elementOrder: ['tools', 'project', 'usage', 'memory', 'context', 'agents', 'todos', 'environment'],
@@ -679,10 +594,10 @@ test('mergeConfig defaults colors to expected semantic palette', () => {
   assert.equal(config.colors.warning, 'yellow');
   assert.equal(config.colors.usageWarning, 'brightMagenta');
   assert.equal(config.colors.critical, 'red');
-  assert.equal(config.colors.model, 'cyan');
-  assert.equal(config.colors.project, 'yellow');
+  assert.equal(config.colors.model, 'green');
+  assert.equal(config.colors.project, 'cyan');
   assert.equal(config.colors.git, 'magenta');
-  assert.equal(config.colors.gitBranch, 'cyan');
+  assert.equal(config.colors.gitBranch, 'brightMagenta');
   assert.equal(config.colors.label, 'dim');
   assert.equal(config.colors.custom, 208);
 });
@@ -987,6 +902,36 @@ test('mergeConfig rejects non-string advisorOverride and non-boolean showAdvisor
   const config = mergeConfig({ display: { showAdvisor: 'yes', advisorOverride: 42 } });
   assert.equal(config.display.showAdvisor, false);
   assert.equal(config.display.advisorOverride, '');
+});
+
+test('mergeConfig: orchestration defaults', () => {
+  const c = mergeConfig({});
+  assert.equal(c.display.orchestrationSource, 'auto');
+  assert.equal(c.display.showOrchestration, true);
+  assert.equal(c.display.showOrchestrationDetail, false);
+  assert.equal(c.display.orchestrationFreshnessMs, 900000);
+});
+
+test('mergeConfig: migrates legacy showOmcMode/showOmcState when new keys absent', () => {
+  const c = mergeConfig({ display: { showOmcMode: false, showOmcState: true } });
+  assert.equal(c.display.showOrchestration, false);
+  assert.equal(c.display.showOrchestrationDetail, true);
+  assert.equal(c.display.orchestrationSource, 'auto');
+});
+
+test('mergeConfig: new keys win over legacy when both present', () => {
+  const c = mergeConfig({ display: { showOmcMode: false, showOrchestration: true } });
+  assert.equal(c.display.showOrchestration, true);
+});
+
+test('mergeConfig: orchestrationSource validates to auto on garbage', () => {
+  assert.equal(mergeConfig({ display: { orchestrationSource: 'nope' } }).display.orchestrationSource, 'auto');
+  assert.equal(mergeConfig({ display: { orchestrationSource: 'superpowers' } }).display.orchestrationSource, 'superpowers');
+});
+
+test('mergeConfig: orchestrationFreshnessMs rejects non-positive', () => {
+  assert.equal(mergeConfig({ display: { orchestrationFreshnessMs: 0 } }).display.orchestrationFreshnessMs, 900000);
+  assert.equal(mergeConfig({ display: { orchestrationFreshnessMs: 60000 } }).display.orchestrationFreshnessMs, 60000);
 });
 
 test('mergeConfig defaults projectLineOrder to no reordering', () => {

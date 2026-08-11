@@ -8,14 +8,17 @@ import { loadConfig } from "./config.js";
 import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
+import { readOmcState } from "./omc-state.js";
+import { readSuperpowersState } from "./superpowers-state.js";
 import { readAuthInfo } from "./auth.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
 import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
-import type { RenderContext } from "./types.js";
+import type { RenderContext, StdinData, TranscriptData } from "./types.js";
 import type { GitStatus } from "./git.js";
 import type { HudConfig } from "./config.js";
+import type { OrchestrationState } from "./orchestration.js";
 
 export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 import { fileURLToPath } from "node:url";
@@ -36,6 +39,8 @@ export type MainDeps = {
   runExtraCmd: typeof runExtraCmd;
   getClaudeCodeVersion: typeof getClaudeCodeVersion;
   getMemoryUsage: typeof getMemoryUsage;
+  readOmcState: typeof readOmcState;
+  readSuperpowersState: typeof readSuperpowersState;
   readAuthInfo: typeof readAuthInfo;
   applyContextWindowFallback: typeof applyContextWindowFallback;
   render: typeof render;
@@ -56,6 +61,32 @@ export function isHudDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
     return false;
   }
   return value !== "0" && value !== "false" && value !== "off" && value !== "no";
+}
+
+// Resolve exactly one orchestration state per display.orchestrationSource.
+// 'auto' prefers superpowers (the active ecosystem) and falls back to OMC;
+// pinning to one source skips the other's filesystem read.
+function resolveOrchestration(
+  config: HudConfig,
+  stdin: StdinData,
+  transcript: TranscriptData,
+  deps: { readSuperpowersState: typeof readSuperpowersState; readOmcState: typeof readOmcState },
+  now: number,
+): OrchestrationState | null {
+  const src = config.display.orchestrationSource;
+  if (src === "off") return null;
+  const sp = src === "superpowers" || src === "auto"
+    ? deps.readSuperpowersState({
+        cwd: stdin.cwd,
+        latestSuperpowersSkill: transcript.latestSuperpowersSkill,
+        todos: transcript.todos,
+        agentsActive: transcript.agents.filter((a) => a.status === "running").length,
+        now,
+        freshnessMs: config.display.orchestrationFreshnessMs,
+      })
+    : null;
+  if (sp) return sp;
+  return src === "omc" || src === "auto" ? deps.readOmcState(stdin.cwd) : null;
 }
 
 /**
@@ -100,6 +131,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     runExtraCmd,
     getClaudeCodeVersion,
     getMemoryUsage,
+    readOmcState,
+    readSuperpowersState,
     readAuthInfo,
     applyContextWindowFallback,
     render,
@@ -200,6 +233,8 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
         ? deps.readAuthInfo()
         : null;
 
+    const orchestration = resolveOrchestration(config, stdin, transcript, deps, deps.now());
+
     const ctx: RenderContext = {
       stdin,
       transcript,
@@ -213,6 +248,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       memoryUsage,
       config,
       extraLabel,
+      orchestration,
       outputStyle,
       claudeCodeVersion,
       effortLevel: effortInfo?.level,

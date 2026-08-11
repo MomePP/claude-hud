@@ -1,15 +1,20 @@
-import * as fs from 'node:fs';
+import * as fs from 'fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as readline from 'node:readline';
+import * as readline from 'readline';
 import { createHash } from 'node:crypto';
 import { getHudPluginDir } from './claude-config-dir.js';
-import { createDebug } from './debug.js';
-import type { TranscriptData, ToolEntry, AgentEntry, TodoItem, SessionTokenUsage } from './types.js';
 import { sanitizeDisplayText } from './utils/sanitize.js';
 import { sanitizeTranscriptModel } from './model-source.js';
-
-const debug = createDebug('transcript');
+import type {
+  TranscriptData,
+  ToolEntry,
+  AgentEntry,
+  TodoItem,
+  SessionTokenUsage,
+  LastRequestTokenUsage,
+  PendingPermission,
+} from './types.js';
 
 interface TranscriptLine {
   timestamp?: string;
@@ -19,34 +24,44 @@ interface TranscriptLine {
   content?: string;
   slug?: string;
   customTitle?: string;
-  // Top-level field stamped onto every assistant record after `/advisor` is
-  // set. Holds the canonical advisor model ID (e.g. "claude-opus-4-7").
-  advisorModel?: string;
   message?: {
     id?: unknown;
-    // Usually an array of content blocks, but slash-command records (e.g.
-    // `/effort`) store their output as a raw string.
-    content?: ContentBlock[] | string;
     model?: unknown;
+    // Claude Code emits background-agent `<task-notification>` blocks as
+    // user-role messages with plain-string content, so we accept both shapes.
+    // Slash-command records (e.g. `/effort`) also store output as a raw string.
+    content?: ContentBlock[] | string;
     usage?: {
       input_tokens?: number;
       output_tokens?: number;
       cache_creation_input_tokens?: number;
       cache_read_input_tokens?: number;
+      reasoning_tokens?: number;
+      output_tokens_details?: {
+        reasoning_tokens?: number;
+        reasoningTokens?: number;
+      };
+      completion_tokens_details?: {
+        reasoning_tokens?: number;
+        reasoningTokens?: number;
+      };
     };
-  };
-  // Result payload the harness stamps onto the record carrying a tool_result
-  // block. For Agent calls it reports `resolvedModel`, the model the subagent
-  // actually runs on — the only source when the caller inherits the session
-  // model instead of passing `model` explicitly.
-  toolUseResult?: {
-    resolvedModel?: unknown;
   };
   compactMetadata?: {
     trigger?: string;
     preTokens?: number;
     postTokens?: number;
     durationMs?: number;
+  };
+  // Top-level field stamped onto every assistant record after `/advisor` is
+  // set. Holds the canonical advisor model ID (e.g. "claude-opus-4-7").
+  advisorModel?: string;
+  // Result payload the harness stamps onto the record carrying a tool_result
+  // block. For Agent calls it reports `resolvedModel`, the model the subagent
+  // actually runs on — the only source when the caller inherits the session
+  // model instead of passing `model` explicitly.
+  toolUseResult?: {
+    resolvedModel?: unknown;
   };
   // Harness state markers; `ultra_effort_enter` / `ultra_effort_exit` track
   // entering / leaving ultracode effort.
@@ -62,6 +77,7 @@ interface ContentBlock {
   input?: Record<string, unknown>;
   tool_use_id?: string;
   is_error?: boolean;
+  content?: string | Array<{ type?: string; text?: string }>;
 }
 
 interface TranscriptFileState {
@@ -79,21 +95,35 @@ interface SerializedAgentEntry extends Omit<AgentEntry, 'startTime' | 'endTime'>
   endTime?: string;
 }
 
+interface SerializedThinkingState {
+  active: boolean;
+  lastSeen: string;
+}
+
+interface SerializedPendingPermission {
+  toolName: string;
+  targetSummary: string;
+  timestamp: string;
+}
+
 interface SerializedTranscriptData {
   tools: SerializedToolEntry[];
-  skills: string[];
-  mcpServers: string[];
-  mcpErrors: string[];
   agents: SerializedAgentEntry[];
   todos: TodoItem[];
   sessionStart?: string;
   sessionName?: string;
   lastAssistantResponseAt?: string;
   sessionTokens?: SessionTokenUsage;
+  thinkingState?: SerializedThinkingState;
+  pendingPermission?: SerializedPendingPermission;
   lastCompactBoundaryAt?: string;
   lastCompactPostTokens?: number;
+  skills?: string[];
+  mcpServers?: string[];
   compactionCount?: number;
   advisorModel?: string;
+  latestSuperpowersSkill?: { name: string; at: string };
+  mcpErrors?: string[];
   ultracodeActive?: boolean;
   lastAssistantModel?: string;
 }
@@ -105,7 +135,17 @@ interface TranscriptCacheFile {
   data: SerializedTranscriptData;
 }
 
-const TRANSCRIPT_CACHE_VERSION = 15;
+// v5: adopt upstream's adjacent-usage dedup (fixes ~2.3x session-token
+// inflation from Claude Code dual-logging the same API response). Bumped
+// from v4 to invalidate fork caches written under the old accumulation.
+// v10: graft upstream 0.3.0 transcript captures — advisor model, compaction
+// count, and skills/MCP activity. Bumped past upstream's v9 to invalidate any
+// caches written under the older fork (v5) and upstream (v9) parse semantics.
+// v16: graft upstream 0.7.0 captures — message-id usage dedup, ultracode state,
+// last assistant model, MCP error tracking, and agent resolvedModel. Bumped
+// past upstream's v15 so neither lineage's older caches survive.
+const TRANSCRIPT_CACHE_VERSION = 16;
+
 const MCP_TOOL_NAME_PATTERN = /^mcp__(.+?)__(.+)$/;
 const ACTIVITY_NAME_MAX_LEN = 64;
 const MESSAGE_ID_MAX_LEN = 128;
@@ -117,6 +157,34 @@ const MCP_ERROR_SERVERS_MAX = 64;
 // cap exists to prevent a malformed transcript from persisting an oversized
 // string through the JSON cache and onto every statusline refresh.
 const ADVISOR_MODEL_MAX_LEN = 64;
+
+// 4MB tail window: enough to catch the most recent ~80–130 agent calls and
+// tool results while bounding I/O. Ported from omc-hud. Files smaller than
+// this threshold are still fully streamed.
+const MAX_TAIL_BYTES = 4 * 1024 * 1024;
+
+// Tools known to require permission approval in Claude Code.
+const PERMISSION_TOOLS = new Set(['Edit', 'Write', 'Bash']);
+// Pending permission is shown for every tool_use that hasn't received a
+// matching tool_result yet — the HUD can't observe the approval prompt
+// directly, so we simply mirror "tool call is open" until Claude lands a
+// result (approval or denial both cause a tool_result to arrive). The
+// render layer adds a `(waiting Ns)` suffix so the user can tell whether
+// the open call is a fresh prompt or a long-running approved tool.
+
+// Content block `type` values that indicate extended-thinking activity.
+const THINKING_PART_TYPES = new Set(['thinking', 'reasoning']);
+// How long after the last thinking block we still consider thinking "active".
+const THINKING_RECENCY_MS = 30_000;
+// Hard wall-clock cap for a pending-permission indicator. Real approval
+// prompts resolve in seconds. Anything older than this is stuck — usually
+// because the user interrupted the chat and the tool_use never got a
+// matching tool_result.
+const PENDING_PERMISSION_MAX_AGE_MS = 5 * 60 * 1000;
+// In-transcript grace window: if the latest entry is this much newer than a
+// pending tool_use (and no matching tool_result arrived in between), treat
+// the tool_use as abandoned and drop the indicator.
+const PENDING_PERMISSION_INTERRUPT_GRACE_MS = 30 * 1000;
 
 let createReadStreamImpl: typeof fs.createReadStream = fs.createReadStream;
 
@@ -134,6 +202,10 @@ function normalizeMessageId(value: unknown): string | null {
     : null;
 }
 
+// Claude Code writes the same API response several times as it streams, with
+// token counts that start at zero and grow. Track the high-water mark per
+// message ID and add only the increment, so neither the placeholder records
+// nor the repeats inflate the session total.
 function accumulateMessageUsage(
   usageByMessageId: Map<string, SessionTokenUsage>,
   messageId: string,
@@ -182,43 +254,6 @@ function normalizeSessionTokens(tokens: unknown): SessionTokenUsage | undefined 
   };
 }
 
-function normalizeNameList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const names: string[] = [];
-  for (const item of value) {
-    const name = normalizeActivityName(item);
-    if (!name || seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    names.push(name);
-  }
-
-  return names;
-}
-
-function normalizeActivityName(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const sanitized = sanitizeDisplayText(value).trim();
-
-  if (!sanitized) {
-    return undefined;
-  }
-
-  if (sanitized.length <= ACTIVITY_NAME_MAX_LEN) {
-    return sanitized;
-  }
-
-  return `${sanitized.slice(0, ACTIVITY_NAME_MAX_LEN - 1)}…`;
-}
-
 function getTranscriptCachePath(transcriptPath: string, homeDir: string): string {
   const hash = createHash('sha256').update(path.resolve(transcriptPath)).digest('hex');
   return path.join(getHudPluginDir(homeDir), 'transcript-cache', `${hash}.json`);
@@ -227,8 +262,7 @@ function getTranscriptCachePath(transcriptPath: string, homeDir: string): string
 function canonicalizeTranscriptPath(transcriptPath: string): string | null {
   try {
     return fs.realpathSync(transcriptPath);
-  } catch (err) {
-    debug('Failed to resolve transcript path %s:', transcriptPath, err instanceof Error ? err.message : err);
+  } catch {
     return null;
   }
 }
@@ -237,17 +271,36 @@ function readTranscriptFileState(transcriptPath: string): TranscriptFileState | 
   try {
     const stat = fs.statSync(transcriptPath);
     if (!stat.isFile()) {
-      debug('Transcript path is not a file: %s', transcriptPath);
       return null;
     }
     return {
       mtimeMs: stat.mtimeMs,
       size: stat.size,
     };
-  } catch (err) {
-    debug('Failed to stat transcript file %s:', transcriptPath, err instanceof Error ? err.message : err);
+  } catch {
     return null;
   }
+}
+
+// Read the last `maxBytes` of a file and split into lines. Discards the first
+// line if we started mid-file (handles partial lines and UTF-8 boundary splits).
+function readTailLines(filePath: string, fileSize: number, maxBytes: number): string[] {
+  const startOffset = Math.max(0, fileSize - maxBytes);
+  const bytesToRead = fileSize - startOffset;
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(bytesToRead);
+  try {
+    fs.readSync(fd, buffer, 0, bytesToRead, startOffset);
+  } finally {
+    fs.closeSync(fd);
+  }
+  const lines = buffer.toString('utf8').split('\n');
+  // Drop the first line when we started mid-file — it may be a partial JSONL
+  // entry or a UTF-8 multibyte split.
+  if (startOffset > 0 && lines.length > 0) {
+    lines.shift();
+  }
+  return lines;
 }
 
 function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData {
@@ -257,9 +310,6 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
       startTime: tool.startTime.toISOString(),
       endTime: tool.endTime?.toISOString(),
     })),
-    skills: [...data.skills],
-    mcpServers: [...data.mcpServers],
-    mcpErrors: [...data.mcpErrors],
     agents: data.agents.map((agent) => ({
       ...agent,
       startTime: agent.startTime.toISOString(),
@@ -270,13 +320,36 @@ function serializeTranscriptData(data: TranscriptData): SerializedTranscriptData
     sessionName: data.sessionName,
     lastAssistantResponseAt: data.lastAssistantResponseAt?.toISOString(),
     sessionTokens: data.sessionTokens,
+    thinkingState: data.thinkingState
+      ? { active: data.thinkingState.active, lastSeen: data.thinkingState.lastSeen.toISOString() }
+      : undefined,
+    pendingPermission: data.pendingPermission
+      ? {
+          toolName: data.pendingPermission.toolName,
+          targetSummary: data.pendingPermission.targetSummary,
+          timestamp: data.pendingPermission.timestamp.toISOString(),
+        }
+      : undefined,
     lastCompactBoundaryAt: data.lastCompactBoundaryAt?.toISOString(),
     lastCompactPostTokens: data.lastCompactPostTokens,
+    skills: [...data.skills],
+    mcpServers: [...data.mcpServers],
+    mcpErrors: [...data.mcpErrors],
     compactionCount: data.compactionCount,
     advisorModel: data.advisorModel,
     ultracodeActive: data.ultracodeActive,
     lastAssistantModel: sanitizeTranscriptModel(data.lastAssistantModel),
+    latestSuperpowersSkill: data.latestSuperpowersSkill
+      ? { name: data.latestSuperpowersSkill.name, at: data.latestSuperpowersSkill.at.toISOString() }
+      : undefined,
   };
+}
+
+function normalizeNameList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }
 
 function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptData {
@@ -286,9 +359,6 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
       startTime: new Date(tool.startTime),
       endTime: tool.endTime ? new Date(tool.endTime) : undefined,
     })),
-    skills: normalizeNameList(data.skills),
-    mcpServers: normalizeNameList(data.mcpServers),
-    mcpErrors: normalizeNameList(data.mcpErrors).slice(0, MCP_ERROR_SERVERS_MAX),
     agents: data.agents.map((agent) => ({
       ...agent,
       model: sanitizeTranscriptModel(agent.model),
@@ -300,8 +370,21 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
     sessionName: data.sessionName,
     lastAssistantResponseAt: data.lastAssistantResponseAt ? new Date(data.lastAssistantResponseAt) : undefined,
     sessionTokens: normalizeSessionTokens(data.sessionTokens),
+    thinkingState: data.thinkingState
+      ? { active: data.thinkingState.active, lastSeen: new Date(data.thinkingState.lastSeen) }
+      : undefined,
+    pendingPermission: data.pendingPermission
+      ? {
+          toolName: data.pendingPermission.toolName,
+          targetSummary: data.pendingPermission.targetSummary,
+          timestamp: new Date(data.pendingPermission.timestamp),
+        }
+      : undefined,
     lastCompactBoundaryAt: data.lastCompactBoundaryAt ? new Date(data.lastCompactBoundaryAt) : undefined,
     lastCompactPostTokens: typeof data.lastCompactPostTokens === 'number' ? data.lastCompactPostTokens : undefined,
+    skills: normalizeNameList(data.skills),
+    mcpServers: normalizeNameList(data.mcpServers),
+    mcpErrors: normalizeNameList(data.mcpErrors).slice(0, MCP_ERROR_SERVERS_MAX),
     compactionCount: typeof data.compactionCount === 'number' && Number.isFinite(data.compactionCount) && data.compactionCount >= 0
       ? Math.trunc(data.compactionCount)
       : undefined,
@@ -310,6 +393,11 @@ function deserializeTranscriptData(data: SerializedTranscriptData): TranscriptDa
       : undefined,
     ultracodeActive: typeof data.ultracodeActive === 'boolean' ? data.ultracodeActive : undefined,
     lastAssistantModel: sanitizeTranscriptModel(data.lastAssistantModel),
+    latestSuperpowersSkill: data.latestSuperpowersSkill
+      && typeof data.latestSuperpowersSkill.name === 'string'
+      && typeof data.latestSuperpowersSkill.at === 'string'
+      ? { name: data.latestSuperpowersSkill.name, at: new Date(data.latestSuperpowersSkill.at) }
+      : undefined,
   };
 }
 
@@ -330,8 +418,7 @@ function readTranscriptCache(transcriptPath: string, state: TranscriptFileState)
     }
 
     return deserializeTranscriptData(parsed.data);
-  } catch (err) {
-    debug('Failed to read transcript cache:', err instanceof Error ? err.message : err);
+  } catch {
     return null;
   }
 }
@@ -339,13 +426,7 @@ function readTranscriptCache(transcriptPath: string, state: TranscriptFileState)
 function writeTranscriptCache(transcriptPath: string, state: TranscriptFileState, data: TranscriptData): void {
   try {
     const cachePath = getTranscriptCachePath(transcriptPath, os.homedir());
-    const cacheDir = path.dirname(cachePath);
-    fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
-    try {
-      fs.chmodSync(cacheDir, 0o700);
-    } catch {
-      // Best-effort: some filesystems do not support POSIX modes.
-    }
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
     const payload: TranscriptCacheFile = {
       version: TRANSCRIPT_CACHE_VERSION,
       transcriptPath: path.resolve(transcriptPath),
@@ -353,24 +434,48 @@ function writeTranscriptCache(transcriptPath: string, state: TranscriptFileState
       data: serializeTranscriptData(data),
     };
     fs.writeFileSync(cachePath, JSON.stringify(payload), { encoding: 'utf8', mode: 0o600 });
-    try {
-      fs.chmodSync(cachePath, 0o600);
-    } catch {
-      // Best-effort: cache permissions should not break rendering.
-    }
-  } catch (err) {
-    debug('Failed to write transcript cache:', err instanceof Error ? err.message : err);
+  } catch {
+    // Cache failures are non-fatal; fall back to fresh parsing next time.
   }
+}
+
+/**
+ * Recompute time-decay fields on every call so cache hits don't return stale
+ * `active` / `pendingPermission` values. Called on both the cache-hit and the
+ * fresh-parse return paths.
+ */
+function finalizeTranscriptResult(result: TranscriptData): TranscriptData {
+  const now = Date.now();
+
+  let thinkingState = result.thinkingState;
+  if (thinkingState) {
+    const age = now - thinkingState.lastSeen.getTime();
+    thinkingState = { ...thinkingState, active: age <= THINKING_RECENCY_MS };
+  }
+
+  // pendingPermission normally clears when the matching tool_result appends
+  // to the transcript. If the user interrupted mid-prompt, no tool_result
+  // ever arrives — so apply a wall-clock cap here to clear stuck indicators
+  // even on pure cache-hit reads where we don't see a fresh user entry.
+  let pendingPermission = result.pendingPermission;
+  if (pendingPermission) {
+    const age = now - pendingPermission.timestamp.getTime();
+    if (age > PENDING_PERMISSION_MAX_AGE_MS) {
+      pendingPermission = undefined;
+    }
+  }
+
+  return { ...result, thinkingState, pendingPermission };
 }
 
 export async function parseTranscript(transcriptPath: string): Promise<TranscriptData> {
   const result: TranscriptData = {
     tools: [],
+    agents: [],
+    todos: [],
     skills: [],
     mcpServers: [],
     mcpErrors: [],
-    agents: [],
-    todos: [],
   };
 
   if (!transcriptPath || !fs.existsSync(transcriptPath)) {
@@ -389,23 +494,30 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
 
   const cached = readTranscriptCache(canonicalTranscriptPath, transcriptState);
   if (cached) {
-    return cached;
+    return finalizeTranscriptResult(cached);
   }
 
   const toolMap = new Map<string, ToolEntry>();
-  const skillSet = new Set<string>();
-  const mcpServerSet = new Set<string>();
-  const mcpErrorSet = new Set<string>();
   const agentMap = new Map<string, AgentEntry>();
+  // Maps background-agent id (e.g. "a8de3dd") → tool_use_id, so a later
+  // `<task-notification>` completion without a tool_use_id can still resolve.
+  const backgroundAgentMap = new Map<string, string>();
+  // tool_use_id → {toolName, target, timestamp} for permission-requiring tools
+  // that haven't received a tool_result yet. Entries drop when the result
+  // arrives; surfaced on the result when the youngest entry is <3s old.
+  const pendingPermissionMap = new Map<string, PendingPermission>();
   let latestTodos: TodoItem[] = [];
   const taskIdToIndex = new Map<string, number>();
   const queueCompletionMap = new Map<string, Date>();
   let latestSlug: string | undefined;
   let customTitle: string | undefined;
-  let latestAdvisorModel: string | undefined;
-  let latestUltracodeActive: boolean | undefined;
   let lastCompactBoundaryAt: Date | undefined;
   let lastCompactPostTokens: number | undefined;
+  const skillSet = new Set<string>();
+  const mcpServerSet = new Set<string>();
+  const mcpErrorSet = new Set<string>();
+  let latestAdvisorModel: string | undefined;
+  let latestUltracodeActive: boolean | undefined;
   let compactionCount = 0;
   const sessionTokens: SessionTokenUsage = {
     inputTokens: 0,
@@ -413,87 +525,96 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
   };
-  const usageByMessageId = new Map<string, SessionTokenUsage>();
+  // Claude Code dual-logs each API response to the transcript, so consecutive
+  // assistant entries can repeat identical usage. Track the previous entry's
+  // usage signature to skip adjacent duplicates (see the assistant branch).
   let lastUsageKey: string | undefined;
+  // message.id → high-water usage, the preferred dedup key when present.
+  const usageByMessageId = new Map<string, SessionTokenUsage>();
 
   let parsedCleanly = false;
+  // Tail-read only covers the last 4MB, so token accumulation and session
+  // start would be partial. Flag so we can skip writing those to the result.
+  const usedTailRead = transcriptState.size > MAX_TAIL_BYTES;
+  // Track the freshest entry timestamp seen so the pending-permission
+  // picker can detect interruptions (entries after a pending tool_use).
+  let latestEntryTimestamp: Date | undefined;
 
-  try {
-    const fileStream = createReadStreamImpl(canonicalTranscriptPath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      if (!line.trim()) {
-        lastUsageKey = undefined;
-        continue;
+  const handleLine = (line: string): void => {
+    if (!line.trim()) {
+      lastUsageKey = undefined;
+      return;
+    }
+    try {
+      const entry = JSON.parse(line) as TranscriptLine;
+      if (typeof entry.timestamp === 'string') {
+        const ts = new Date(entry.timestamp);
+        if (!Number.isNaN(ts.getTime())
+          && (!latestEntryTimestamp || ts.getTime() > latestEntryTimestamp.getTime())) {
+          latestEntryTimestamp = ts;
+        }
       }
-
-      try {
-        const entry = JSON.parse(line) as TranscriptLine;
-        if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
-          customTitle = entry.customTitle;
-        } else if (typeof entry.slug === 'string') {
-          latestSlug = entry.slug;
+      if (entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+        customTitle = entry.customTitle;
+      } else if (typeof entry.slug === 'string') {
+        latestSlug = entry.slug;
+      }
+      // Current ultracode state, distinguishable only from the transcript
+      // (stdin reports it as plain `xhigh`). Two signals update this in file
+      // order, last wins: the self-correcting ultra_effort_enter/exit
+      // attachment (can lag a turn) and the immediate `/effort` command output.
+      if (entry.type === 'attachment') {
+        const attachmentType = entry.attachment?.type;
+        if (attachmentType === 'ultra_effort_enter') {
+          latestUltracodeActive = true;
+        } else if (attachmentType === 'ultra_effort_exit') {
+          latestUltracodeActive = false;
         }
-        // Capture the advisor model from the top-level `advisorModel` field.
-        // Claude Code stamps this onto every *assistant* record after `/advisor`
-        // is set, so we restrict to that record type (matching the documented
-        // source) and the most recent occurrence reflects the current choice.
-        // Length is hard-capped so a malformed transcript cannot persist an
-        // unbounded value through the cache layer.
-        if (
-          entry.type === 'assistant'
-          && typeof entry.advisorModel === 'string'
-          && entry.advisorModel.length > 0
-        ) {
+      }
+      // The `/effort` command-output signal. Anchored at the start of a *user*
+      // record's string content, so prose quoting the phrase can't flip state.
+      // Brittle by necessity — couples to Claude Code's /effort wording; if that
+      // changes, the label falls back to the (laggier) attachments.
+      if (entry.type === 'user' && typeof entry.message?.content === 'string') {
+        const effortCommandMatch = entry.message.content.match(
+          /^<local-command-stdout>Set effort level to (\w+)/,
+        );
+        if (effortCommandMatch) {
+          latestUltracodeActive = effortCommandMatch[1].toLowerCase() === 'ultracode';
+        }
+      }
+      if (entry.type === 'assistant') {
+        if (typeof entry.timestamp === 'string') {
+          const ts = new Date(entry.timestamp);
+          if (!Number.isNaN(ts.getTime())
+            && (!result.lastAssistantResponseAt || ts.getTime() > result.lastAssistantResponseAt.getTime())) {
+            result.lastAssistantResponseAt = ts;
+          }
+        }
+        // Capture the advisor model from the top-level `advisorModel` field
+        // Claude Code stamps onto every assistant record after `/advisor` is
+        // set. The most recent occurrence reflects the current choice. Length
+        // is hard-capped so a malformed transcript cannot persist an unbounded
+        // value through the cache layer.
+        if (typeof entry.advisorModel === 'string' && entry.advisorModel.length > 0) {
           latestAdvisorModel = entry.advisorModel.slice(0, ADVISOR_MODEL_MAX_LEN);
-        }
-        // Current ultracode state, distinguishable only from the transcript
-        // (stdin reports it as plain `xhigh`). Two signals update this in file
-        // order, last wins: the self-correcting ultra_effort_enter/exit
-        // attachment (can lag a turn) and the immediate `/effort` command output.
-        if (entry.type === 'attachment') {
-          const attachmentType = entry.attachment?.type;
-          if (attachmentType === 'ultra_effort_enter') {
-            latestUltracodeActive = true;
-          } else if (attachmentType === 'ultra_effort_exit') {
-            latestUltracodeActive = false;
-          }
-        }
-        // The `/effort` command-output signal. Anchored at the start of a *user*
-        // record's string content, so prose quoting the phrase can't flip state.
-        // Brittle by necessity — couples to Claude Code's /effort wording; if that
-        // changes, the label falls back to the (laggier) attachments.
-        if (entry.type === 'user' && typeof entry.message?.content === 'string') {
-          const effortCommandMatch = entry.message.content.match(
-            /^<local-command-stdout>Set effort level to (\w+)/,
-          );
-          if (effortCommandMatch) {
-            latestUltracodeActive = effortCommandMatch[1].toLowerCase() === 'ultracode';
-          }
         }
         // Capture the actual model from the assistant message's `model` field.
         // This reflects what the API actually served, which may differ from the
         // model Claude Code thinks it's using (e.g. proxy redirect via cc-switch).
-        if (entry.type === 'assistant') {
-          const transcriptModel = sanitizeTranscriptModel(entry.message?.model);
-          if (transcriptModel) {
-            result.lastAssistantModel = transcriptModel;
-          }
+        const transcriptModel = sanitizeTranscriptModel(entry.message?.model);
+        if (transcriptModel) {
+          result.lastAssistantModel = transcriptModel;
         }
-        // Accumulate token usage from assistant messages.
-        // Claude Code can write the same API response to the transcript 2-3 times
-        // (dual-logging). Prefer the API-response-level message.id so duplicates
-        // can be removed even when another record appears between them. Only
-        // bounded string IDs are retained, and the set is capped to keep a
-        // malformed transcript from growing memory without limit. Records with
-        // missing or invalid IDs keep the previous consecutive usage-fingerprint
-        // fallback.
-        if (entry.type === 'assistant' && entry.message?.usage) {
+        if (entry.message?.usage) {
           const usage = entry.message.usage;
+          // Claude Code can write the same API response 2-3 times (dual-logging).
+          // Prefer the API-response-level message.id so duplicates are removed
+          // even when another record lands between them, and so the streaming
+          // zero-then-grow placeholders count exactly once. Only bounded string
+          // IDs are retained, and the map is capped so a malformed transcript
+          // cannot grow memory without limit. Records with a missing or invalid
+          // ID keep the previous consecutive usage-fingerprint fallback.
           const msgId = normalizeMessageId(entry.message.id);
           const normalizedUsage: SessionTokenUsage = {
             inputTokens: normalizeTokenCount(usage.input_tokens),
@@ -516,49 +637,81 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
               sessionTokens.cacheReadTokens += normalizedUsage.cacheReadTokens;
             }
           }
+          // last-request is a snapshot, not a sum — idempotent under
+          // duplicates, so refresh it on every assistant usage entry.
+          const lastUsage = extractLastRequestTokenUsage(usage);
+          if (lastUsage) {
+            result.lastRequestTokenUsage = lastUsage;
+          }
         } else {
           lastUsageKey = undefined;
         }
-        // Track Claude Code's compact_boundary marker. Both manual (/compact)
-        // and auto compaction emit this system entry with compactMetadata; we
-        // take the most recent one's timestamp so callers can distinguish a
-        // legitimate post-compact zero frame from a transient stdin glitch.
-        if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
-          const ts = entry.timestamp ? new Date(entry.timestamp) : null;
-          if (ts && !Number.isNaN(ts.getTime())) {
-            compactionCount += 1;
-            if (!lastCompactBoundaryAt || ts.getTime() > lastCompactBoundaryAt.getTime()) {
-              lastCompactBoundaryAt = ts;
-              const post = entry.compactMetadata?.postTokens;
-              lastCompactPostTokens = typeof post === 'number' && Number.isFinite(post) && post >= 0
-                ? Math.trunc(post)
-                : undefined;
-            }
-          }
-        }
-        // Capture accurate background-agent completion timestamps from queue-operation entries.
-        // The tool_result timestamp in the parent transcript is written at launch time, not
-        // when the agent actually finishes, so we override with the enqueue timestamp.
-        if (entry.type === 'queue-operation' && entry.operation === 'enqueue' && entry.content) {
-          const taskIdMatch = entry.content.match(/<task-id>([^<]+)<\/task-id>/);
-          const toolUseIdMatch = entry.content.match(/<tool-use-id>([^<]+)<\/tool-use-id>/);
-          if (taskIdMatch && toolUseIdMatch && entry.timestamp) {
+      } else {
+        lastUsageKey = undefined;
+      }
+      // Background-agent completion via Claude Code's `queue-operation`
+      // enqueue events. Complements the `<task-notification>` path in
+      // processEntry — either signal is enough to mark a background agent
+      // completed, whichever arrives first. The queue-op timestamp is the
+      // accurate finish time (the tool_result was written at launch).
+      if (entry.type === 'queue-operation' && entry.operation === 'enqueue' && entry.content && entry.timestamp) {
+        const m = entry.content.match(/<tool-use-id>([^<]+)<\/tool-use-id>/);
+        if (m) {
+          const queuedAgent = agentMap.get(m[1]);
+          if (queuedAgent && queuedAgent.status === 'running') {
             const ts = new Date(entry.timestamp);
             if (!Number.isNaN(ts.getTime())) {
-              queueCompletionMap.set(toolUseIdMatch[1], ts);
+              queuedAgent.status = 'completed';
+              queuedAgent.endTime = ts;
             }
           }
         }
-        processEntry(entry, toolMap, skillSet, mcpServerSet, mcpErrorSet, agentMap, taskIdToIndex, latestTodos, result);
-      } catch (err) {
-        lastUsageKey = undefined;
-        debug('Skipping malformed transcript line:', err instanceof Error ? err.message : err);
+      }
+
+      // Track Claude Code's compact_boundary marker. Both manual (/compact)
+      // and auto compaction emit this system entry with compactMetadata; we
+      // take the most recent one's timestamp so callers can distinguish a
+      // legitimate post-compact zero frame from a transient stdin glitch.
+      if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
+        const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+        if (ts && !Number.isNaN(ts.getTime())) {
+          compactionCount += 1;
+          if (!lastCompactBoundaryAt || ts.getTime() > lastCompactBoundaryAt.getTime()) {
+            lastCompactBoundaryAt = ts;
+            const post = entry.compactMetadata?.postTokens;
+            lastCompactPostTokens = typeof post === 'number' && Number.isFinite(post) && post >= 0
+              ? Math.trunc(post)
+              : undefined;
+          }
+        }
+      }
+      processEntry(entry, toolMap, skillSet, mcpServerSet, mcpErrorSet, agentMap, taskIdToIndex, latestTodos, result, backgroundAgentMap, pendingPermissionMap);
+    } catch {
+      // Malformed line breaks usage adjacency too.
+      lastUsageKey = undefined;
+      // Skip malformed lines
+    }
+  };
+
+  try {
+    if (usedTailRead) {
+      for (const line of readTailLines(transcriptPath, transcriptState.size, MAX_TAIL_BYTES)) {
+        handleLine(line);
+      }
+    } else {
+      const fileStream = createReadStreamImpl(canonicalTranscriptPath);
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity,
+      });
+      for await (const line of rl) {
+        handleLine(line);
       }
     }
 
     parsedCleanly = true;
-  } catch (err) {
-    debug('Transcript stream read error, returning partial results:', err instanceof Error ? err.message : err);
+  } catch {
+    // Return partial results on error
   }
 
   // Resolve agent completion: prefer queue-operation timestamps (accurate for
@@ -577,15 +730,51 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     }
   }
   result.tools = Array.from(toolMap.values()).slice(-20);
-  result.skills = Array.from(skillSet.values());
-  result.mcpServers = Array.from(mcpServerSet.values());
-  result.mcpErrors = Array.from(mcpErrorSet.values());
   result.agents = Array.from(agentMap.values()).slice(-10);
   result.todos = latestTodos;
   result.sessionName = customTitle ?? latestSlug;
-  result.sessionTokens = sessionTokens;
+  // Tail-read totals cover only the last 4MB so they'd be misleadingly low;
+  // the same goes for sessionStart, which would be the first in-tail entry
+  // rather than the true session origin.
+  if (usedTailRead) {
+    result.sessionStart = undefined;
+    result.sessionTokens = undefined;
+  } else {
+    result.sessionTokens = sessionTokens;
+  }
+
+  // Surface the YOUNGEST still-open permission entry — that's the most
+  // recent thing Claude is waiting on. Insertion order is chronological, so
+  // the last entry in the map is the freshest. The entry carries its raw
+  // timestamp; the render layer computes `(waiting Ns)` at display time.
+  //
+  // Interrupt detection: if the latest transcript entry is notably newer
+  // than a pending tool_use and no matching tool_result arrived between
+  // them, the user interrupted — drop the permission. Also apply a wall-
+  // clock cap so stale sessions don't show hour-old "waiting" indicators.
+  const nowMs = Date.now();
+  const interruptCutoff = latestEntryTimestamp
+    ? latestEntryTimestamp.getTime() - PENDING_PERMISSION_INTERRUPT_GRACE_MS
+    : -Infinity;
+  const wallClockCutoff = nowMs - PENDING_PERMISSION_MAX_AGE_MS;
+  const cutoff = Math.max(interruptCutoff, wallClockCutoff);
+
+  let youngest: PendingPermission | undefined;
+  for (const permission of pendingPermissionMap.values()) {
+    if (permission.timestamp.getTime() < cutoff) continue;
+    if (!youngest || permission.timestamp.getTime() > youngest.timestamp.getTime()) {
+      youngest = permission;
+    }
+  }
+  if (youngest) {
+    result.pendingPermission = youngest;
+  }
+
   result.lastCompactBoundaryAt = lastCompactBoundaryAt;
   result.lastCompactPostTokens = lastCompactPostTokens;
+  result.skills = Array.from(skillSet.values());
+  result.mcpServers = Array.from(mcpServerSet.values());
+  result.mcpErrors = Array.from(mcpErrorSet.values());
   result.compactionCount = compactionCount;
   result.advisorModel = latestAdvisorModel;
   result.ultracodeActive = latestUltracodeActive;
@@ -593,7 +782,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     writeTranscriptCache(canonicalTranscriptPath, transcriptState, result);
   }
 
-  return result;
+  return finalizeTranscriptResult(result);
 }
 
 export function _setCreateReadStreamForTests(impl: typeof fs.createReadStream | null): void {
@@ -609,49 +798,117 @@ function processEntry(
   agentMap: Map<string, AgentEntry>,
   taskIdToIndex: Map<string, number>,
   latestTodos: TodoItem[],
-  result: TranscriptData
+  result: TranscriptData,
+  backgroundAgentMap: Map<string, string>,
+  pendingPermissionMap: Map<string, PendingPermission>
 ): void {
   const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
-  const hasValidTimestamp = !Number.isNaN(timestamp.getTime());
 
-  if (!result.sessionStart && entry.timestamp && hasValidTimestamp) {
+  if (!result.sessionStart && entry.timestamp) {
     result.sessionStart = timestamp;
   }
 
-  if (entry.type === 'assistant' && entry.timestamp && hasValidTimestamp) {
-    result.lastAssistantResponseAt = timestamp;
+  const content = entry.message?.content;
+
+  // Claude Code emits background-agent completion as a user-role message with
+  // string-shaped content: `<task-notification>...<tool-use-id>...</tool-use-id>
+  // ...<status>completed</status>...</task-notification>`. Without this handling
+  // background agents would stay "running" forever in the HUD.
+  if (typeof content === 'string') {
+    if (content.includes('<task-notification>') || content.includes('<task_id>') || content.includes('<task-id>')) {
+      const notification = parseTaskNotification(content);
+      if (notification && notification.status === 'completed') {
+        const toolUseId = notification.toolUseId ?? backgroundAgentMap.get(notification.taskId);
+        if (toolUseId) {
+          const agent = agentMap.get(toolUseId);
+          if (agent && agent.status === 'running') {
+            agent.status = 'completed';
+            agent.endTime = timestamp;
+          }
+        }
+      }
+    }
+    return;
   }
 
-  const content = entry.message?.content;
   if (!content || !Array.isArray(content)) return;
 
   for (const block of content) {
+    // Extended-thinking / reasoning blocks extend the active window.
+    if (THINKING_PART_TYPES.has(block.type)) {
+      result.thinkingState = { active: true, lastSeen: timestamp };
+    }
+
     if (block.type === 'tool_use' && block.id && block.name) {
-      const skillName = block.name === 'Skill'
+      // OMC routes tool calls through a proxy layer and emits names like
+      // "proxy_Edit". Strip the prefix so downstream routing and the HUD
+      // display treat them identically to the native tools.
+      const canonicalName = block.name.replace(/^proxy_/, '');
+
+      // Track active Skill invocations and MCP server usage for the opt-in
+      // skills/MCP activity line (display.showSkills / showMcp).
+      const skillName = canonicalName === 'Skill'
         ? normalizeSkillName(block.input?.skill)
         : undefined;
       if (skillName) {
         skillSet.add(skillName);
+        // Track the most-recent superpowers phase (prefix stripped) for the
+        // orchestration badge's freshness window.
+        const SP_PREFIX = 'superpowers:';
+        if (skillName.startsWith(SP_PREFIX) && entry.timestamp) {
+          const prev = result.latestSuperpowersSkill;
+          if (!prev || timestamp.getTime() >= prev.at.getTime()) {
+            result.latestSuperpowersSkill = {
+              name: skillName.slice(SP_PREFIX.length),
+              at: timestamp,
+            };
+          }
+        }
       }
 
-      const mcpServerName = extractMcpServerName(block.name);
+      const mcpServerName = extractMcpServerName(canonicalName);
       if (mcpServerName) {
         mcpServerSet.add(mcpServerName);
       }
 
+      // Permission-requiring tools get tracked so the HUD can show an
+      // "APPROVE?" hint while the user is looking at the prompt. Skip
+      // when the entry has no real timestamp — we'd otherwise use Date.now()
+      // and incorrectly treat every stale fixture entry as freshly pending.
+      if (PERMISSION_TOOLS.has(canonicalName) && entry.timestamp) {
+        pendingPermissionMap.set(block.id, {
+          toolName: canonicalName,
+          targetSummary: extractPermissionTarget(canonicalName, block.input) ?? '...',
+          timestamp,
+        });
+      }
+
       const toolEntry: ToolEntry = {
         id: block.id,
-        name: block.name,
-        target: extractTarget(block.name, block.input),
+        name: canonicalName,
+        target: extractTarget(canonicalName, block.input),
         status: 'running',
         startTime: timestamp,
       };
 
-      if (block.name === 'Task' || block.name === 'Agent') {
+      if (canonicalName === 'Task' || canonicalName === 'Agent') {
         const input = block.input as Record<string, unknown>;
+        const rawType = typeof input?.subagent_type === 'string' ? input.subagent_type.trim() : '';
+        const rawName = typeof input?.name === 'string' ? input.name.trim() : '';
+        // The Agent tool defaults to the general-purpose agent when
+        // subagent_type is omitted; fall back to the caller-supplied name
+        // first since it's usually more descriptive (e.g. "build-validator").
+        // Claude Code's newer `Agent` tool defaults to the general-purpose
+        // subagent when subagent_type is omitted; upstream's older `Task` tool
+        // falls back to the generic 'agent' label.
+        const fallbackType = canonicalName === 'Agent'
+          ? 'general-purpose'
+          : canonicalName === 'Task'
+            ? 'agent'
+            : 'unknown';
         const agentEntry: AgentEntry = {
           id: block.id,
-          type: (input?.subagent_type as string) ?? 'agent',
+          type: rawType || rawName || fallbackType,
           model: sanitizeTranscriptModel(input?.model),
           description: (input?.description as string) ?? undefined,
           status: 'running',
@@ -659,7 +916,7 @@ function processEntry(
           background: (input?.run_in_background as boolean) === true,
         };
         agentMap.set(block.id, agentEntry);
-      } else if (block.name === 'TodoWrite') {
+      } else if (canonicalName === 'TodoWrite') {
         const input = block.input as { todos?: TodoItem[] };
         if (input?.todos && Array.isArray(input.todos)) {
           // Build a FIFO queue of taskIds per content string, ordered by the
@@ -698,7 +955,7 @@ function processEntry(
             }
           }
         }
-      } else if (block.name === 'TaskCreate') {
+      } else if (canonicalName === 'TaskCreate') {
         const input = block.input as Record<string, unknown>;
         const subject = typeof input?.subject === 'string' ? input.subject : '';
         const description = typeof input?.description === 'string' ? input.description : '';
@@ -713,7 +970,7 @@ function processEntry(
         if (taskId) {
           taskIdToIndex.set(taskId, latestTodos.length - 1);
         }
-      } else if (block.name === 'TaskUpdate') {
+      } else if (canonicalName === 'TaskUpdate') {
         const input = block.input as Record<string, unknown>;
         const index = resolveTaskIndex(input?.taskId, taskIdToIndex, latestTodos);
         if (index !== null) {
@@ -735,6 +992,9 @@ function processEntry(
     }
 
     if (block.type === 'tool_result' && block.tool_use_id) {
+      // Clear any pending permission entry — the approval was resolved.
+      pendingPermissionMap.delete(block.tool_use_id);
+
       const tool = toolMap.get(block.tool_use_id);
       if (tool) {
         tool.status = block.is_error ? 'error' : 'completed';
@@ -765,12 +1025,129 @@ function processEntry(
         if (resolvedModel) {
           agent.model = resolvedModel;
         }
-        if (!agent.background) {
+        // A run_in_background Agent completes asynchronously. Primary signal
+        // is `agent.background` (set from the Task tool_use's
+        // `input.run_in_background` field — structural, robust to wording
+        // changes). Fallback: the legacy "Async agent launched successfully"
+        // tool_result prefix, kept so old transcripts without the input
+        // field still classify correctly. Real completion arrives later as
+        // a `<task-notification>` block or a `queue-operation` enqueue.
+        const isBackgroundLaunch = agent.background === true || isAsyncLaunchResult(block.content);
+        if (isBackgroundLaunch) {
+          const bgAgentId = extractBackgroundAgentId(block.content);
+          if (bgAgentId) {
+            backgroundAgentMap.set(bgAgentId, block.tool_use_id);
+          }
+          // Keep status as 'running' — real completion handled elsewhere.
+        } else {
+          agent.status = 'completed';
           agent.endTime = timestamp;
+        }
+      }
+
+      // Foreground agent completion can also arrive as a TaskOutput tool_result
+      // whose content contains a `<task-notification>` block.
+      if (block.content) {
+        const notification = parseTaskNotification(block.content);
+        if (notification && notification.status === 'completed') {
+          const toolUseId = notification.toolUseId ?? backgroundAgentMap.get(notification.taskId);
+          if (toolUseId) {
+            const bg = agentMap.get(toolUseId);
+            if (bg && bg.status === 'running') {
+              bg.status = 'completed';
+              bg.endTime = timestamp;
+            }
+          }
         }
       }
     }
   }
+}
+
+function contentToText(content: string | Array<{ type?: string; text?: string }> | undefined): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  return content.find((c) => c.type === 'text')?.text ?? '';
+}
+
+const ASYNC_LAUNCH_PREFIX = 'Async agent launched';
+
+function isAsyncLaunchResult(
+  content: string | Array<{ type?: string; text?: string }> | undefined
+): boolean {
+  const text = contentToText(content).trimStart();
+  return text.startsWith(ASYNC_LAUNCH_PREFIX);
+}
+
+function extractBackgroundAgentId(
+  content: string | Array<{ type?: string; text?: string }> | undefined
+): string | null {
+  const text = contentToText(content);
+  const match = text.match(/agentId:\s*([a-zA-Z0-9]+)/);
+  return match ? match[1] : null;
+}
+
+function parseTaskNotification(
+  content: string | Array<{ type?: string; text?: string }>
+): { taskId: string; toolUseId: string | null; status: string } | null {
+  const text = contentToText(content);
+  // Claude Code emits hyphen-cased tags; accept underscore variant defensively.
+  const taskIdMatch =
+    text.match(/<task-id>([^<]+)<\/task-id>/) ||
+    text.match(/<task_id>([^<]+)<\/task_id>/);
+  const statusMatch = text.match(/<status>([^<]+)<\/status>/);
+  const toolUseIdMatch =
+    text.match(/<tool-use-id>([^<]+)<\/tool-use-id>/) ||
+    text.match(/<tool_use_id>([^<]+)<\/tool_use_id>/);
+
+  if (!taskIdMatch || !statusMatch) return null;
+
+  return {
+    taskId: taskIdMatch[1],
+    toolUseId: toolUseIdMatch ? toolUseIdMatch[1] : null,
+    status: statusMatch[1],
+  };
+}
+
+function extractLastRequestTokenUsage(
+  usage: NonNullable<NonNullable<TranscriptLine['message']>['usage']>
+): LastRequestTokenUsage | null {
+  const input = usage.input_tokens;
+  const output = usage.output_tokens;
+  if (typeof input !== 'number' && typeof output !== 'number') return null;
+  const reasoning =
+    usage.reasoning_tokens
+    ?? usage.output_tokens_details?.reasoning_tokens
+    ?? usage.output_tokens_details?.reasoningTokens
+    ?? usage.completion_tokens_details?.reasoning_tokens
+    ?? usage.completion_tokens_details?.reasoningTokens;
+
+  const out: LastRequestTokenUsage = {
+    inputTokens: normalizeTokenCount(input),
+    outputTokens: normalizeTokenCount(output),
+  };
+  if (typeof reasoning === 'number' && reasoning > 0) {
+    out.reasoningTokens = normalizeTokenCount(reasoning);
+  }
+  return out;
+}
+
+// Short, HUD-friendly label for permission prompts — "file.ts", "rm -rf ~", etc.
+function extractPermissionTarget(toolName: string, input?: Record<string, unknown>): string | undefined {
+  if (!input) return undefined;
+  if (toolName === 'Edit' || toolName === 'Write') {
+    const raw = (input.file_path as string) ?? (input.path as string);
+    if (!raw) return undefined;
+    const segments = raw.replace(/\\/g, '/').split('/');
+    return segments[segments.length - 1] || raw;
+  }
+  if (toolName === 'Bash') {
+    const cmd = input.command as string | undefined;
+    if (!cmd) return undefined;
+    const trimmed = cmd.trim().slice(0, 20);
+    return trimmed.length < cmd.trim().length ? `${trimmed}...` : trimmed;
+  }
+  return undefined;
 }
 
 function extractTarget(toolName: string, input?: Record<string, unknown>): string | undefined {
@@ -786,19 +1163,42 @@ function extractTarget(toolName: string, input?: Record<string, unknown>): strin
     case 'Grep':
       return input.pattern as string;
     case 'Skill':
-      return normalizeSkillName(input.skill);
-    case 'Bash':
+      return typeof input.skill === 'string' && input.skill.trim().length > 0
+        ? input.skill
+        : undefined;
+    case 'Bash': {
       if (typeof input.command !== 'string') {
         return undefined;
       }
+      // Collapse newlines/tabs/runs of whitespace so a multiline heredoc-style
+      // command renders as a single readable line before truncation.
       const cmd = input.command.replace(/\s+/g, ' ').trim();
       return cmd
         ? cmd.length > 30
           ? `${cmd.slice(0, 30).trimEnd()}...`
           : cmd
         : undefined;
+    }
   }
   return undefined;
+}
+
+function normalizeActivityName(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const sanitized = sanitizeDisplayText(value).trim();
+
+  if (!sanitized) {
+    return undefined;
+  }
+
+  if (sanitized.length <= ACTIVITY_NAME_MAX_LEN) {
+    return sanitized;
+  }
+
+  return `${sanitized.slice(0, ACTIVITY_NAME_MAX_LEN - 1)}…`;
 }
 
 function normalizeSkillName(value: unknown): string | undefined {

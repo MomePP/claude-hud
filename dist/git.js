@@ -1,6 +1,18 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
+import { getHudPluginDir } from './claude-config-dir.js';
 import { createDebug } from './debug.js';
 import { createGitRunner } from './git-runner.js';
 const debug = createDebug('git');
+// Max-age backstop for the sentinel cache. Unstaged working-tree edits/deletes of tracked
+// files (e.g. an in-place editor write or `> file`) change isDirty/fileStats but touch no
+// `.git/` sentinel, so the sentinel check alone would serve a stale clean/dirty state forever.
+// Bounding cache age to a few seconds keeps isDirty correct within that window. At the ~300ms
+// statusline cadence this is roughly a 6x reduction in git spawns vs. uncached, while still
+// reflecting a freshly-edited file quickly.
+const GIT_CACHE_MAX_AGE_MS = 2000;
 export async function getGitBranch(cwd) {
     if (!cwd)
         return null;
@@ -17,86 +29,10 @@ export async function getGitBranch(cwd) {
         await runner?.close();
     }
 }
-export async function getGitStatus(cwd) {
-    if (!cwd)
-        return null;
-    let runner;
-    try {
-        runner = createGitRunner(cwd);
-        // Get branch name
-        const branch = await resolveGitRef(runner);
-        if (!branch)
-            return null;
-        // Check for dirty state and parse file stats
-        let isDirty = false;
-        let fileStats;
-        let lineDiff;
-        try {
-            const { stdout: statusOut } = await runner.run(['-c', 'core.quotePath=false', '--no-optional-locks', 'status', '--porcelain'], 1000);
-            const trimmed = statusOut.trim();
-            isDirty = trimmed.length > 0;
-            if (isDirty) {
-                fileStats = parseFileStats(trimmed);
-            }
-        }
-        catch (err) {
-            debug('Failed to get git status:', err instanceof Error ? err.message : err);
-        }
-        // Get per-file and total line diffs
-        if (isDirty) {
-            try {
-                const { stdout: numstatOut } = await runner.run(['-c', 'core.quotePath=false', 'diff', '--numstat', 'HEAD'], 2000);
-                const trackedPaths = new Set(fileStats?.trackedFiles.map((file) => file.fullPath) ?? []);
-                const { totalDiff, perFileDiff } = parseNumstat(numstatOut, trackedPaths);
-                lineDiff = totalDiff;
-                if (fileStats) {
-                    applyLineDiffsToFiles(fileStats.trackedFiles, perFileDiff);
-                }
-            }
-            catch (err) {
-                debug('Failed to get line diff:', err instanceof Error ? err.message : err);
-            }
-        }
-        // Get ahead/behind counts
-        let ahead = 0;
-        let behind = 0;
-        try {
-            const { stdout: revOut } = await runner.run(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], 1000);
-            const parts = revOut.trim().split(/\s+/);
-            if (parts.length === 2) {
-                behind = parseInt(parts[0], 10) || 0;
-                ahead = parseInt(parts[1], 10) || 0;
-            }
-        }
-        catch (err) {
-            debug('Failed to get ahead/behind (no upstream?):', err instanceof Error ? err.message : err);
-        }
-        // Build GitHub branch URL from remote
-        let branchUrl;
-        try {
-            const { stdout: remoteOut } = await runner.run(['remote', 'get-url', 'origin'], 1000);
-            const remote = remoteOut.trim();
-            const httpsBase = remote
-                .replace(/^git@github\.com:/, 'https://github.com/')
-                .replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/')
-                .replace(/\.git$/, '');
-            if (httpsBase.startsWith('https://github.com/')) {
-                branchUrl = buildGitHubRefUrl(httpsBase, branch);
-            }
-        }
-        catch (err) {
-            debug('Failed to get remote URL:', err instanceof Error ? err.message : err);
-        }
-        return { branch, isDirty, ahead, behind, fileStats, lineDiff, branchUrl };
-    }
-    catch (err) {
-        debug('getGitStatus failed:', err instanceof Error ? err.message : err);
-        return null;
-    }
-    finally {
-        await runner?.close();
-    }
-}
+/**
+ * Branch name, or a useful stand-in for detached HEAD: an exact tag when one
+ * points at HEAD, else `detached:<short sha>`.
+ */
 async function resolveGitRef(runner) {
     const { stdout: branchOut } = await runner.run(['rev-parse', '--abbrev-ref', 'HEAD'], 1000);
     const branch = branchOut.trim();
@@ -125,6 +61,112 @@ function buildGitHubRefUrl(httpsBase, ref) {
         return `${httpsBase}/commit/${detachedMatch[1]}`;
     }
     return `${httpsBase}/tree/${encodeGitHubRef(ref)}`;
+}
+// Up to 5 git child processes per uncached call. Cache by mtime sentinels on
+// the in-tree `.git/` files that change when relevant state changes (branch
+// switches, stages, commits, fetches, remote edits). Cached `null` is not
+// stored — non-git dirs short-circuit on the fs.existsSync check below.
+export async function getGitStatus(cwd) {
+    if (!cwd)
+        return null;
+    const gitDir = path.join(cwd, '.git');
+    const gitHeadPath = path.join(gitDir, 'HEAD');
+    // Fast-path: not a regular git repo (no .git/HEAD). Could still be a worktree
+    // (.git is a file) or non-git dir. Skip the sentinel cache and fall back to
+    // the uncached path — the launcher hits this rarely.
+    if (!fs.existsSync(gitHeadPath)) {
+        return computeGitStatus(cwd);
+    }
+    const sentinelPaths = buildGitSentinelPaths(cwd, gitDir);
+    const cached = readGitCache(cwd);
+    const currentSentinels = statSentinels(sentinelPaths);
+    if (cached
+        && isWithinMaxAge(cached.computedAt)
+        && sentinelsMatch(cached.key.sentinels, currentSentinels)) {
+        return cached.data;
+    }
+    const result = await computeGitStatus(cwd);
+    writeGitCache({ cwd, sentinels: currentSentinels }, result);
+    return result;
+}
+async function computeGitStatus(cwd) {
+    let runner;
+    try {
+        runner = createGitRunner(cwd);
+        const activeRunner = runner;
+        // Stage A — run 4 git commands in parallel. None of these depend on each
+        // other's output, so concurrent spawn cuts wall time from ~5×8ms to ~max(8ms).
+        // The runner multiplexes by request id, so concurrency is safe on Windows too.
+        const [branchResult, statusResult, revListResult, remoteResult] = await Promise.allSettled([
+            resolveGitRef(activeRunner),
+            activeRunner.run(['-c', 'core.quotePath=false', '--no-optional-locks', 'status', '--porcelain'], 1000),
+            activeRunner.run(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], 1000),
+            activeRunner.run(['remote', 'get-url', 'origin'], 1000),
+        ]);
+        if (branchResult.status !== 'fulfilled') {
+            debug('Failed to resolve git ref:', branchResult.reason);
+            return null;
+        }
+        const branch = branchResult.value;
+        if (!branch)
+            return null;
+        let isDirty = false;
+        let fileStats;
+        if (statusResult.status === 'fulfilled') {
+            const trimmed = statusResult.value.stdout.trim();
+            isDirty = trimmed.length > 0;
+            if (isDirty)
+                fileStats = parseFileStats(trimmed);
+        }
+        else {
+            debug('Failed to get git status:', statusResult.reason);
+        }
+        // Stage B — numstat only when dirty. Must run after status because the
+        // tracked-paths set comes from porcelain output.
+        let lineDiff;
+        if (isDirty) {
+            try {
+                const { stdout: numstatOut } = await activeRunner.run(['-c', 'core.quotePath=false', 'diff', '--numstat', 'HEAD'], 2000);
+                const trackedPaths = new Set(fileStats?.trackedFiles.map((file) => file.fullPath) ?? []);
+                const { totalDiff, perFileDiff } = parseNumstat(numstatOut, trackedPaths);
+                lineDiff = totalDiff;
+                if (fileStats) {
+                    applyLineDiffsToFiles(fileStats.trackedFiles, perFileDiff);
+                }
+            }
+            catch (err) {
+                debug('Failed to get line diff:', err instanceof Error ? err.message : err);
+            }
+        }
+        let ahead = 0;
+        let behind = 0;
+        if (revListResult.status === 'fulfilled') {
+            const parts = revListResult.value.stdout.trim().split(/\s+/);
+            if (parts.length === 2) {
+                behind = parseInt(parts[0], 10) || 0;
+                ahead = parseInt(parts[1], 10) || 0;
+            }
+        }
+        let branchUrl;
+        if (remoteResult.status === 'fulfilled') {
+            const remote = remoteResult.value.stdout.trim();
+            const httpsBase = remote
+                .replace(/^git@github\.com:/, 'https://github.com/')
+                .replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/')
+                .replace(/\.git$/, '');
+            if (httpsBase.startsWith('https://github.com/')) {
+                branchUrl = buildGitHubRefUrl(httpsBase, branch);
+            }
+        }
+        return { branch, isDirty, ahead, behind, fileStats, lineDiff, branchUrl };
+    }
+    catch (err) {
+        debug('getGitStatus failed:', err instanceof Error ? err.message : err);
+        return null;
+    }
+    finally {
+        await runner?.close();
+    }
 }
 /**
  * Parse git status --porcelain output and count file stats (Starship-compatible format)
@@ -231,5 +273,166 @@ function applyLineDiffsToFiles(files, perFileDiff) {
             file.lineDiff = diff;
         }
     }
+}
+// --- Cache ---
+function buildGitSentinelPaths(cwd, gitDir) {
+    const paths = [
+        path.join(gitDir, 'HEAD'), // branch switches
+        path.join(gitDir, 'index'), // stage operations
+        path.join(gitDir, 'FETCH_HEAD'), // fetches (ahead/behind)
+        path.join(gitDir, 'ORIG_HEAD'), // merge/rebase in progress
+        path.join(gitDir, 'MERGE_HEAD'), // merge in progress
+        path.join(gitDir, 'config'), // remote URL changes
+        path.join(gitDir, 'packed-refs'), // pushes/repacks against packed refs (ahead/behind)
+        cwd, // top-level untracked-file adds/removes
+    ];
+    // ahead/behind (`git rev-list @{upstream}...HEAD`) depends on two refs that the sentinels
+    // above do not track when they move:
+    //   - the LOCAL branch ref (refs/heads/<branch>) — `git commit` touches `index`, but
+    //     `git update-ref`/`git branch -f`/another worktree move it with no index change.
+    //   - the UPSTREAM remote-tracking ref (refs/remotes/<remote>/<branch>) — a `git push`
+    //     advances it and touches NONE of the sentinels above (fetch updates FETCH_HEAD;
+    //     push does not).
+    // Watch both loose ref files; packed-refs above covers the case where either is packed.
+    for (const refPath of resolveRefSentinelPaths(gitDir)) {
+        paths.push(refPath);
+    }
+    return paths;
+}
+// Resolve the loose-ref paths whose movement affects ahead/behind: the current branch's
+// local ref and its configured upstream ref, derived from HEAD + config. Returns [] for
+// detached HEAD. A ref file may not exist (the ref is packed) — statSentinel records that
+// as a `null` sentinel, and a later op that materializes the loose ref flips null→value,
+// busting the cache.
+function resolveRefSentinelPaths(gitDir) {
+    try {
+        const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+        const headMatch = head.match(/^ref:\s*refs\/heads\/(.+)$/);
+        if (!headMatch)
+            return []; // detached HEAD — no symbolic branch
+        const branch = headMatch[1];
+        const result = [path.join(gitDir, 'refs', 'heads', ...branch.split('/'))];
+        const config = fs.readFileSync(path.join(gitDir, 'config'), 'utf8');
+        const upstream = parseBranchUpstream(config, branch);
+        if (upstream) {
+            const refSegments = upstream.merge.replace(/^refs\/heads\//, '').split('/');
+            result.push(path.join(gitDir, 'refs', 'remotes', upstream.remote, ...refSegments));
+        }
+        return result;
+    }
+    catch {
+        return [];
+    }
+}
+// Extract `remote` and `merge` from the `[branch "<name>"]` section of a git config.
+// Returns null when the branch has no upstream configured.
+function parseBranchUpstream(config, branch) {
+    const lines = config.split('\n');
+    let inSection = false;
+    let remote;
+    let merge;
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        const sectionMatch = line.match(/^\[(.+)\]$/);
+        if (sectionMatch) {
+            // Section header — `[branch "name"]`. Match the exact branch (quoted name).
+            inSection = sectionMatch[1].trim() === `branch "${branch}"`;
+            continue;
+        }
+        if (!inSection)
+            continue;
+        const remoteMatch = line.match(/^remote\s*=\s*(.+)$/);
+        if (remoteMatch)
+            remote = remoteMatch[1].trim();
+        const mergeMatch = line.match(/^merge\s*=\s*(.+)$/);
+        if (mergeMatch)
+            merge = mergeMatch[1].trim();
+    }
+    if (!remote || !merge)
+        return null;
+    return { remote, merge };
+}
+function statSentinel(filePath) {
+    try {
+        const stat = fs.statSync(filePath);
+        return { mtimeMs: stat.mtimeMs, size: stat.size };
+    }
+    catch {
+        return null;
+    }
+}
+function statSentinels(paths) {
+    const result = {};
+    for (const p of paths) {
+        result[p] = statSentinel(p);
+    }
+    return result;
+}
+function sentinelsMatch(a, b) {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length)
+        return false;
+    for (const key of keysA) {
+        const sa = a[key];
+        const sb = b[key];
+        if (sa === null && sb === null)
+            continue;
+        if (sa === null || sb === null)
+            return false;
+        if (sa.mtimeMs !== sb.mtimeMs || sa.size !== sb.size)
+            return false;
+    }
+    return true;
+}
+function getGitCachePath(cwd) {
+    const homeDir = os.homedir();
+    const hash = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+    return path.join(getHudPluginDir(homeDir), 'git-cache', `${hash}.json`);
+}
+function isGitStatus(value) {
+    if (value === null)
+        return true;
+    if (!value || typeof value !== 'object')
+        return false;
+    const v = value;
+    return (typeof v.branch === 'string'
+        && typeof v.isDirty === 'boolean'
+        && typeof v.ahead === 'number'
+        && typeof v.behind === 'number');
+}
+function readGitCache(cwd) {
+    try {
+        const raw = fs.readFileSync(getGitCachePath(cwd), 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed.key?.cwd !== cwd)
+            return null;
+        if (parsed.data !== null && !isGitStatus(parsed.data))
+            return null;
+        return parsed;
+    }
+    catch {
+        return null;
+    }
+}
+function writeGitCache(key, data) {
+    try {
+        const cachePath = getGitCachePath(key.cwd);
+        fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+        const entry = { key, data, computedAt: Date.now() };
+        fs.writeFileSync(cachePath, JSON.stringify(entry), 'utf8');
+    }
+    catch {
+        // Cache write failures are non-fatal.
+    }
+}
+// A cache entry is fresh only within GIT_CACHE_MAX_AGE_MS of when it was computed. A missing
+// `computedAt` (older cache format) or a clock that has gone backwards counts as stale, so we
+// recompute rather than trust an unbounded-age entry.
+function isWithinMaxAge(computedAt) {
+    if (typeof computedAt !== 'number')
+        return false;
+    const age = Date.now() - computedAt;
+    return age >= 0 && age < GIT_CACHE_MAX_AGE_MS;
 }
 //# sourceMappingURL=git.js.map

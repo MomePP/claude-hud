@@ -1,4 +1,5 @@
 import { yellow, green, magenta, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 import { truncateString } from '../utils/truncate.js';
 import { sanitize as sanitizeDisplayText } from './lines/added-dirs.js';
 const MAX_RECENT_COMPLETED = 2;
@@ -22,9 +23,10 @@ export function renderAgentsLine(ctx) {
     if (toShow.length === 0) {
         return null;
     }
+    const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
     const lines = [];
     for (const agent of toShow) {
-        lines.push(formatAgent(agent, colors));
+        lines.push(formatAgent(agent, colors, namespaceMode));
     }
     return lines.join('\n');
 }
@@ -71,9 +73,9 @@ function getStatusIcon(status) {
             return green('✓');
     }
 }
-function formatAgent(agent, colors) {
+function formatAgent(agent, colors, namespaceMode) {
     const statusIcon = getStatusIcon(agent.status);
-    const type = magenta(agent.type);
+    const type = magenta(formatNamespaced(agent.type, namespaceMode));
     const modelLabel = formatAgentModel(agent.model);
     const model = modelLabel ? label(`[${modelLabel}]`, colors) : '';
     const desc = agent.description
