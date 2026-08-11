@@ -166,6 +166,16 @@ These constraints decide every conflict resolution. If an upstream change violat
 - **`colors.barFilled?` / `colors.barEmpty?` stay optional.** Upstream wants required strings; that breaks `display.barStyle`. Keep `string | undefined` shape with no default (commit `4287e07`).
 - **`colors.thinking` and `colors.duration` stay** as independent overrides. Upstream periodically tries to consolidate them into `colors.label`; refuse.
 - **Hybrid background-agent tracking stays whole.** See "Background-agent invariant" below.
+- **`projectLineOrder` never applies to `projectStyle: 'natural'`.** Upstream's
+  first-line reordering (`src/render/first-line-order.ts`) is a pipes/compact
+  feature. Natural style composes prose (`… in X on Y`), so permuting its
+  segments breaks the grammar — `renderNaturalProjectLine` maps
+  `buildExtras()` parts to plain text and keeps its fixed order. If a future
+  upstream change wires ordering into every renderer, reject the natural half.
+- **`tests/setup-command.test.js` targets the launcher, not `commands/setup.md`.**
+  Upstream asserts the `/dev/tty` probe form inside its inline one-liners; the
+  fork has none, so the test follows the probe into `scripts/claude-hud.sh`.
+  Re-point it there on conflict rather than accepting upstream's version.
 
 ### Fork features that must survive every sync
 
