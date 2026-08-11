@@ -201,6 +201,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled: display?.usageBarEnabled ?? true,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,

@@ -173,6 +173,7 @@ export function renderSessionLine(ctx) {
                 colors,
                 usageBarEnabled: display?.usageBarEnabled ?? true,
                 barWidth,
+                barStyle: display?.barStyle,
                 timeFormat,
                 showResetLabel,
                 forceLabel: true,

@@ -4,6 +4,45 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-11 — MomePP fork (barStyle on model-scoped usage bars)
+
+Patch: one fork-only rendering bug found by a post-release review of the 0.9.0 sync.
+No config changes, no default changes.
+
+### Fixed — fork
+
+- `src/render/session-line.ts:197` — the model-scoped weekly usage window
+  (`rate_limits.model_scoped`, adopted from upstream #669/#690) did not receive
+  `display.barStyle`, while the context, 5-hour and 7-day bars beside it all did. With a
+  non-default `barStyle`, the scoped bar rendered in default block glyphs next to
+  correctly-styled neighbours — e.g. `[Opus] ━───── 10% │ Usage ━━━─── 25% │ Fable ████░░ 38%`.
+  `display.barStyle` is a fork-only setting and model-scoped windows arrived from upstream
+  after it, so the new call site was never threaded through during the sync.
+
+### Tests
+
+1129 tests, **1123 passing, 0 failing, 6 skipped** (one added). New regression test in
+`tests/scoped-usage.test.js` asserts a `barStyle: "thin"` compact line contains no leftover
+block glyphs; verified to fail against the unfixed build before the fix was restored.
+
+### Known, not fixed
+
+- `src/render/first-line-order.ts:49` (upstream code, unmodified) — `orderFirstLineParts`
+  writes permuted texts back into fixed keyed-slot indices, so a segment contributing two
+  parts is only kept adjacent when its destination slots happen to be adjacent. Its own doc
+  comment promises those parts "stay together". Reachable in the fork's compact layout with
+  `gitStatus.branchOverflow: "wrap"` plus a non-default `projectLineOrder`, because the fork
+  interleaves more unkeyed parts (config counts, usage bars, thinking / pending-permission
+  indicators) between keyed ones than upstream does — the project path and the `git:(…)`
+  badge can then be split by an unkeyed part. Left as-is deliberately: honoring "keep
+  multi-part segments together" and "unkeyed parts keep their original slots" are in direct
+  tension, so the fix belongs upstream rather than as a fork divergence in a file the fork
+  otherwise does not touch.
+
+### Bumped
+
+- `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` → `0.9.1`
+
 ## [0.9.0] - 2026-08-11 — MomePP fork (upstream sync onto 6f065f2, post-0.7.0)
 
 Rebase-reconstruct of the fork onto the current upstream base, replacing the 0.3.0
