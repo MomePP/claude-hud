@@ -19,14 +19,24 @@ the numbers behind it were coming from the wrong place.
   `<repo-root>/.superpowers/sdd/<plan-basename>/progress.md`, one directory per plan, and
   its contents changed from a markdown checkbox list to an append-only prose ledger whose
   first line is `# SDD ledger — plan: <plan file path>`. The reader still pointed at the
-  old flat path with a checkbox parser, which produced two failures:
-  - **Normal case — silent enrichment loss.** The flat file no longer exists, so
-    `readProgressFile` returned null on every tick and the badge fell back to todo counts,
-    losing exactly the compaction-proof progress the ledger was introduced to provide.
-  - **Actively wrong — stale pre-6.2 ledger.** superpowers explicitly leaves an old flat
-    ledger in place as another plan's progress (its `SKILL.md` names the path and says
-    "leave it in place"). Anyone who ran SDD before 6.2 had hud reading that dead file as
-    current, pinning the badge active with frozen counts indefinitely.
+  old flat path with a checkbox parser, so the badge silently fell back to todo counts and
+  never showed real ledger progress — losing exactly the compaction-proof signal the
+  ledger was introduced to provide. Verified against three real pre-6.2 ledgers on the
+  maintainer's machine: 0.9.1 renders no orchestration badge for any of them, 0.9.2
+  renders `✦ sdd 7/8` once the same content sits at the 6.2 path.
+
+  Note that the checkbox parser was already mismatched *before* 6.2: a real ledger written
+  2026-07-03 (three weeks before 6.2.0) is already append-only prose. 6.2 moved the file;
+  the format had drifted earlier. The reader has therefore never enriched from a real
+  superpowers ledger, which is why the regression went unnoticed since 0.8.0.
+
+  The pre-6.2 flat ledger does **not** pin the badge active with frozen counts, as this
+  entry originally claimed — a prose ledger yields zero checkbox matches, so the old
+  `total > completed` guard evaluated `0 > 0` and correctly returned null. That failure
+  mode would require a checkbox-format flat file, which superpowers does not produce.
+  The flat path is still deliberately ignored going forward: superpowers explicitly leaves
+  an old flat ledger in place as another plan's progress (its `SKILL.md` names the path and
+  says "leave it in place"), so reading one could only ever report stale progress.
 - Discovery now walks up from `cwd` to find `.superpowers/sdd`, stopping at the repo root
   (a `.git` entry — file or directory, so linked worktrees resolve correctly) rather than
   shelling out to `git rev-parse --show-toplevel` on every ~300ms tick. The newest ledger
@@ -82,8 +92,10 @@ prose-ledger counts and objective, total falling back to task lines when todos a
 the legacy flat file being ignored, newest-plan-workspace-wins, discovery from a
 subdirectory of the repo, the walk stopping at the repo root, checkbox format surviving
 inside a plan workspace, and checkbox lines in a prose ledger counting as findings rather
-than tasks. Verified end-to-end against a real 6.2-format ledger: the project line renders
-`✦ subagent-driven-development 1/2`.
+than tasks. Verified end-to-end against a synthetic 6.2-format ledger (`✦
+subagent-driven-development 1/2`) and against a real 8-task ledger from another project
+relocated to the 6.2 layout, where 0.9.1 renders no badge and 0.9.2 renders `✦ sdd 7/8`
+with the objective read from the identity line.
 
 ### Bumped
 
