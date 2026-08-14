@@ -116,6 +116,12 @@ export function duration(text: string, colors?: Partial<HudColorOverrides>): str
   return withOverride(text, colors?.duration, DIM);
 }
 
+// Scoped to the orchestration glyph + mode in both detail layouts, so a custom
+// palette can lift that segment without repainting the global label color.
+export function orchestration(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.orchestration, CYAN);
+}
+
 export function warning(text: string, colors?: Partial<HudColorOverrides>): string {
   return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }

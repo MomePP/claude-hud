@@ -1,5 +1,5 @@
 import type { RenderContext } from '../types.js';
-import { cyan, label, dim } from './colors.js';
+import { orchestration as orchestrationColor, label, dim } from './colors.js';
 import { sanitize as sanitizeDisplayText } from './lines/added-dirs.js';
 
 // Opt-in detail line (display.showOrchestrationDetail) surfacing the active
@@ -26,7 +26,7 @@ export function renderOrchestrationLine(ctx: RenderContext): string | null {
   const glyph = o.source === 'superpowers' ? '✦' : '◆';
   const mode = sanitizeDisplayText(o.mode || o.source);
 
-  let line = `${cyan(glyph)} ${cyan(mode)}`;
+  let line = `${orchestrationColor(glyph, colors)} ${orchestrationColor(mode, colors)}`;
   if (o.objective) {
     const safe = sanitizeDisplayText(o.objective);
     const obj = safe.length > 50 ? `${safe.slice(0, 49)}…` : safe;

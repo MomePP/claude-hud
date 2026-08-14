@@ -600,6 +600,16 @@ test('mergeConfig defaults colors to expected semantic palette', () => {
   assert.equal(config.colors.gitBranch, 'brightMagenta');
   assert.equal(config.colors.label, 'dim');
   assert.equal(config.colors.custom, 208);
+  assert.equal(config.colors.orchestration, 'cyan');
+});
+
+test('mergeConfig validates colors.orchestration', () => {
+  assert.equal(mergeConfig({ colors: { orchestration: '#ff6600' } }).colors.orchestration, '#ff6600');
+  assert.equal(mergeConfig({ colors: { orchestration: 214 } }).colors.orchestration, 214);
+  assert.equal(
+    mergeConfig({ colors: { orchestration: 'not-a-color' } }).colors.orchestration,
+    DEFAULT_CONFIG.colors.orchestration,
+  );
 });
 
 test('mergeConfig accepts valid color overrides and filters invalid values', () => {

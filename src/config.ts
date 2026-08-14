@@ -113,6 +113,7 @@ export interface HudColorOverrides {
   custom: HudColorValue;
   thinking: HudColorValue;
   duration: HudColorValue;
+  orchestration: HudColorValue;
   barFilled?: string;
   barEmpty?: string;
 }
@@ -411,6 +412,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     custom: 208,
     thinking: 'dim',
     duration: 'dim',
+    orchestration: 'cyan',
   },
 };
 
@@ -1076,6 +1078,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     duration: validateColorValue(migrated.colors?.duration)
       ? migrated.colors.duration
       : DEFAULT_CONFIG.colors.duration,
+    orchestration: validateColorValue(migrated.colors?.orchestration)
+      ? migrated.colors.orchestration
+      : DEFAULT_CONFIG.colors.orchestration,
     barFilled: validateBarChar(migrated.colors?.barFilled)
       ? migrated.colors.barFilled
       : undefined,

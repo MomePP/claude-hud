@@ -15,6 +15,7 @@ export declare function label(text: string, colors?: Partial<HudColorOverrides>)
 export declare function custom(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function thinking(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function duration(text: string, colors?: Partial<HudColorOverrides>): string;
+export declare function orchestration(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function warning(text: string, colors?: Partial<HudColorOverrides>): string;
 export declare function critical(text: string, colors?: Partial<HudColorOverrides>): string;
 export interface ContextThresholds {

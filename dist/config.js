@@ -158,6 +158,7 @@ export const DEFAULT_CONFIG = {
         custom: 208,
         thinking: 'dim',
         duration: 'dim',
+        orchestration: 'cyan',
     },
 };
 export function getConfigPath() {
@@ -748,6 +749,9 @@ export function mergeConfig(userConfig) {
         duration: validateColorValue(migrated.colors?.duration)
             ? migrated.colors.duration
             : DEFAULT_CONFIG.colors.duration,
+        orchestration: validateColorValue(migrated.colors?.orchestration)
+            ? migrated.colors.orchestration
+            : DEFAULT_CONFIG.colors.orchestration,
         barFilled: validateBarChar(migrated.colors?.barFilled)
             ? migrated.colors.barFilled
             : undefined,

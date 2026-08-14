@@ -4,6 +4,80 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-08-14 — MomePP fork (themeable orchestration badge)
+
+Patch: the inline orchestration badge was built as one `dim()` string, so on a dark
+background it was unreadably subtle with no config escape — the `line` layout coloured the
+same content properly. This makes the two layouts differ in placement only, never in
+whether colour applies, and adds `colors.orchestration` so the segment can be themed
+without dragging the global `colors.label` (and with it the `Context` / `Usage` labels)
+along. No upstream sync. Filed as patch rather than minor at the maintainer's call: the
+substance is a rendering fix, and the new colour key is the fix's escape hatch rather than
+a feature in its own right — note this diverges from 0.10.0, which took a minor for adding
+a config key.
+
+### Added — fork
+
+- **`colors.orchestration`** (color value, default `'cyan'`) — colours the orchestration
+  glyph + mode (`✦ sdd`, `⚙ pdca`) in **both** detail layouts. Scoped to that segment, so
+  raising it to read the badge no longer repaints `Context` / `Usage`, which is what using
+  `colors.label` for this forced. Accepts the same named / 256-index / hex values as every
+  other colour key, and falls back to the default on an invalid value
+  (`src/config.ts`, validator mirrors `colors.thinking`).
+- `orchestration()` helper in `src/render/colors.ts`, `CYAN` fallback, shaped like the
+  existing `thinking()` / `duration()` overrides.
+
+### Changed — fork
+
+- `src/render/lines/project.ts` — the inline badge is no longer a single `dim()` string.
+  It now uses the same three-way colour split as the detail line: glyph + mode on
+  `colors.orchestration`, objective on `colors.label`, task counts `dim`. Badge *format*
+  is unchanged (no parens on the counts, no objective truncation) — that is placement, and
+  placement is what the two layouts are allowed to differ on.
+- `src/render/orchestration-line.ts` — the two hardcoded `cyan()` calls now route through
+  `orchestration(…, colors)`. With the default `'cyan'`, this emits byte-identical output
+  (`withOverride(text, 'cyan', CYAN)` resolves to the same `\x1b[36m`), so the detail line
+  is unchanged unless the user sets the key.
+
+### Conflict resolutions (kept fork features intact)
+
+Not an upstream sync — no conflicts. Orchestration awareness, `colors.thinking`, and
+`colors.duration` are untouched; the new key sits beside them rather than consolidating
+them.
+
+### Skipped (per fork direction)
+
+- **Consolidating `colors.orchestration` into `colors.label`** — the exact failure this
+  release fixes. `colors.thinking`, `colors.duration`, and now `colors.orchestration` stay
+  independent overrides; upstream periodically tries to fold such keys into the generic
+  label colour, and the fork refuses (recorded in `CLAUDE.md`'s fork-direction list).
+- **"Fixing" the badge's count format to match the line's `(c/t)`** — out of scope. The
+  ask was colour parity, not format parity.
+
+### Default-behavior changes visible on update
+
+- **The inline orchestration badge is now cyan instead of dim.** Only affects users running
+  `display.orchestrationDetailLayout: 'inline'` with `showOrchestrationDetail` on — this is
+  the reported bug, fixed. Set `colors.orchestration: 'dim'` to restore the 0.10.0 look.
+- The `line` layout, and every default HUD, render exactly as they did in 0.10.0.
+
+### Tests
+
+1150 tests, **1144 passing, 0 failing, 6 skipped** (four added). New coverage in
+`tests/render.test.js`: the inline badge emitting cyan on the glyph and mode rather than
+dim, `colors.orchestration` repainting glyph + mode across both layouts (asserted on every
+rendered line carrying the segment, so the `line` layout's badge *and* detail line are both
+checked), and the objective staying on `colors.label` with the counts staying dim. In
+`tests/config.test.js`: the `'cyan'` default plus validation of hex / 256-index / invalid
+values. A `captureRenderLinesRaw` helper was added — the existing `captureRenderLines`
+strips ANSI, which no colour assertion can survive.
+
+### Bumped
+
+- `package.json` → `0.10.1`
+- `.claude-plugin/plugin.json` → `0.10.1`
+- `.claude-plugin/marketplace.json` → `0.10.1`
+
 ## [0.10.0] - 2026-08-14 — MomePP fork (inline orchestration detail)
 
 Minor: a new fork-only config key, `display.orchestrationDetailLayout`, lets the

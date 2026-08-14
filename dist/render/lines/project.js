@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { formatModelName, getProviderLabel, resolveModelName } from '../../stdin.js';
 import { formatModelDisplay } from '../model-display.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
-import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor } from '../colors.js';
+import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor, orchestration as orchestrationColor } from '../colors.js';
 import { t } from '../../i18n/index.js';
 import { renderCostEstimate } from './cost.js';
 import { renderAdvisorLine } from './advisor.js';
@@ -90,8 +90,15 @@ function buildExtras(ctx) {
         const inlineDetail = display?.showOrchestrationDetail === true
             && (display?.orchestrationDetailLayout ?? 'line') === 'inline'
             && !!objective;
-        const objectivePart = inlineDetail ? `: ${sanitizeDisplayText(objective)}` : '';
-        push(dim(`${glyph} ${sanitizeDisplayText(mode)}${objectivePart}${progress}`));
+        // Same colour split as renderOrchestrationLine: glyph + mode on
+        // colors.orchestration, objective on colors.label, counts dim. The layouts
+        // differ in placement only, never in whether colour applies.
+        let badge = `${orchestrationColor(glyph, colors)} ${orchestrationColor(sanitizeDisplayText(mode), colors)}`;
+        if (inlineDetail)
+            badge += label(`: ${sanitizeDisplayText(objective)}`, colors);
+        if (progress)
+            badge += dim(progress);
+        push(badge);
     }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
         const { targetSummary, timestamp } = ctx.transcript.pendingPermission;

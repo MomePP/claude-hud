@@ -63,6 +63,7 @@ export interface HudColorOverrides {
     custom: HudColorValue;
     thinking: HudColorValue;
     duration: HudColorValue;
+    orchestration: HudColorValue;
     barFilled?: string;
     barEmpty?: string;
 }

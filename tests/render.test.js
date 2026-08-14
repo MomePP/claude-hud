@@ -93,6 +93,19 @@ function captureRenderLines(ctx) {
   return logs;
 }
 
+// Same as captureRenderLines but keeps the ANSI escapes, for color assertions.
+function captureRenderLinesRaw(ctx) {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = line => logs.push(line);
+  try {
+    render(ctx);
+  } finally {
+    console.log = originalLog;
+  }
+  return logs;
+}
+
 function withColumns(stream, columns, fn) {
   const originalColumns = stream.columns;
   Object.defineProperty(stream, 'columns', { value: columns, configurable: true });
@@ -1108,6 +1121,48 @@ test("orchestrationDetailLayout 'inline' falls back to the detail line with no o
     lines.some((l) => l.includes('✦ subagent-driven-development (1/16)')),
     `got: ${JSON.stringify(lines)}`,
   );
+});
+
+// colors.orchestration scopes the glyph + mode in BOTH layouts, so a custom
+// palette can lift the badge without repainting the global label color.
+test('inline orchestration badge colors the glyph + mode, not dim', () => {
+  const ctx = inlineDetailContext('expanded');
+  const line = captureRenderLinesRaw(ctx).find((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+  assert.ok(line, 'badge line missing');
+  assert.ok(line.includes('\x1b[36m✦'), `glyph not cyan: ${JSON.stringify(line)}`);
+  assert.ok(line.includes('\x1b[36msubagent-driven-development'), `mode not cyan: ${JSON.stringify(line)}`);
+});
+
+test('colors.orchestration repaints the glyph + mode in both layouts', () => {
+  for (const [layout, expectDetailLine] of [['inline', false], ['line', true]]) {
+    const ctx = inlineDetailContext('expanded');
+    ctx.config.display.orchestrationDetailLayout = layout;
+    ctx.config.colors.orchestration = 'brightMagenta';
+    const lines = captureRenderLinesRaw(ctx);
+    const matches = lines.filter((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+    assert.ok(matches.length > 0, `badge missing for layout=${layout}`);
+    for (const m of matches) {
+      assert.ok(
+        m.includes('\x1b[95m✦') && m.includes('\x1b[95msubagent-driven-development'),
+        `layout=${layout} ignored colors.orchestration: ${JSON.stringify(m)}`,
+      );
+    }
+    if (expectDetailLine) {
+      assert.ok(
+        matches.some((m) => stripAnsi(m).includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+        `layout=line should keep the detail line: ${JSON.stringify(matches)}`,
+      );
+    }
+  }
+});
+
+test('orchestration objective stays on colors.label, counts stay dim', () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.config.colors.orchestration = 'brightMagenta';
+  ctx.config.colors.label = 'green';
+  const badge = captureRenderLinesRaw(ctx).find((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+  assert.ok(badge.includes('\x1b[32m: demo-webapp-redesign'), `objective not on colors.label: ${JSON.stringify(badge)}`);
+  assert.ok(badge.includes('\x1b[2m 1/16'), `counts not dim: ${JSON.stringify(badge)}`);
 });
 
 test('renderSessionLine shows custom provider before the model when showProvider is on', () => {

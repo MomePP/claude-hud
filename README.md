@@ -245,6 +245,7 @@ Simplified and Traditional Chinese HUD labels are available as explicit opt-ins.
 | `colors.custom` | color value | `208` | Color for the optional custom line |
 | `colors.thinking` | color value | `dim` | Color for the inline `∿ thinking` indicator (defaults to dim so it stays out of the way; override with any named color, 256-color number, or hex). |
 | `colors.duration` | color value | `dim` | Color for the session-duration extra (the `<glyph> 1h 30m` token). Independent of `colors.label` so you can keep `Context`/`Usage` labels dim while bumping the duration. |
+| `colors.orchestration` | color value | `cyan` | Color for the orchestration glyph and mode (`✦ sdd`, `⚙ pdca`) in both the inline badge and the detail line. Scoped to that segment, so raising it does not repaint the global `Context`/`Usage` labels the way `colors.label` would. The objective still follows `colors.label`; the task counts stay dim. |
 | `colors.barFilled` | string | _(unset — uses `display.barStyle`)_ | Character used for the filled portion of progress bars. When set, overrides `display.barStyle`'s filled character. When unset (default), bars use the `display.barStyle` character set. Inherited from upstream. |
 | `colors.barEmpty` | string | _(unset — uses `display.barStyle`)_ | Character used for the empty portion of progress bars. When set, overrides `display.barStyle`'s empty character. When unset (default), bars use the `display.barStyle` character set. Inherited from upstream. |
 

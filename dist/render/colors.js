@@ -92,6 +92,11 @@ export function thinking(text, colors) {
 export function duration(text, colors) {
     return withOverride(text, colors?.duration, DIM);
 }
+// Scoped to the orchestration glyph + mode in both detail layouts, so a custom
+// palette can lift that segment without repainting the global label color.
+export function orchestration(text, colors) {
+    return withOverride(text, colors?.orchestration, CYAN);
+}
 export function warning(text, colors) {
     return colorize(text, resolveAnsi(colors?.warning, YELLOW));
 }
