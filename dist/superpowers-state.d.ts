@@ -14,8 +14,8 @@ export interface SuperpowersStateInput {
 /**
  * Assemble a superpowers OrchestrationState from transcript-derived signals
  * (latest superpowers skill, todos, running agents) enriched by the optional
- * SDD progress file. Returns null when there is neither a fresh phase nor an
- * in-progress execution file (nothing worth showing).
+ * SDD progress ledger. Returns null when there is neither a fresh phase nor an
+ * in-progress plan workspace (nothing worth showing).
  */
 export declare function readSuperpowersState(input: SuperpowersStateInput): OrchestrationState | null;
 //# sourceMappingURL=superpowers-state.d.ts.map

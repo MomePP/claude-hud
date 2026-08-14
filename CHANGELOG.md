@@ -4,6 +4,91 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-08-14 — MomePP fork (superpowers 6.2 plan-scoped SDD ledger)
+
+Patch: the superpowers orchestration reader tracked a state file that superpowers
+abandoned in its 6.2.0 release (2026-07-23). Fork-only fix — no upstream sync, no new
+config keys, no default flipped. Patch rather than minor because the orchestration badge
+already rendered and still renders under the same `display.orchestration*` settings; only
+the numbers behind it were coming from the wrong place.
+
+### Fixed — fork
+
+- `src/superpowers-state.ts` — superpowers 6.2.0 made the SDD workspace **plan-scoped**:
+  the progress ledger moved from a flat `<cwd>/.superpowers/sdd/progress.md` to
+  `<repo-root>/.superpowers/sdd/<plan-basename>/progress.md`, one directory per plan, and
+  its contents changed from a markdown checkbox list to an append-only prose ledger whose
+  first line is `# SDD ledger — plan: <plan file path>`. The reader still pointed at the
+  old flat path with a checkbox parser, which produced two failures:
+  - **Normal case — silent enrichment loss.** The flat file no longer exists, so
+    `readProgressFile` returned null on every tick and the badge fell back to todo counts,
+    losing exactly the compaction-proof progress the ledger was introduced to provide.
+  - **Actively wrong — stale pre-6.2 ledger.** superpowers explicitly leaves an old flat
+    ledger in place as another plan's progress (its `SKILL.md` names the path and says
+    "leave it in place"). Anyone who ran SDD before 6.2 had hud reading that dead file as
+    current, pinning the badge active with frozen counts indefinitely.
+- Discovery now walks up from `cwd` to find `.superpowers/sdd`, stopping at the repo root
+  (a `.git` entry — file or directory, so linked worktrees resolve correctly) rather than
+  shelling out to `git rev-parse --show-toplevel` on every ~300ms tick. The newest ledger
+  by mtime wins when several plan workspaces coexist.
+- The parser reads completions from distinct `Task <N>: complete` lines and in-progress
+  tasks from those with ledger lines but no completion (a task mid fix-round). The prose
+  ledger states no total, so the total comes from the todo list — SDD creates one todo per
+  plan task — floored at the number of tasks the ledger mentions. The objective is the
+  plan basename taken from the identity line, so the badge shows `recovery-flow` instead
+  of the raw `# SDD ledger — plan: …` heading.
+- Checkbox parsing is kept as a fallback, but only when a ledger holds **no** task lines.
+  `SKILL.md:362` has controllers record deferred minors in the ledger, and a controller
+  that formats those as `- [ ] …` would otherwise flip the parser into checkbox mode and
+  report finding counts as task progress.
+- The flat pre-6.2 path is now deliberately never read. Reading it can only report frozen
+  progress, so absence of a plan workspace is the correct "nothing in flight" answer.
+
+### Changed — fork
+
+- `README.md` (both orchestration entries) and `CLAUDE.md` (the orchestration row of the
+  "fork features that must survive every sync" table) now document the plan-scoped ledger
+  path, the newest-wins rule, and the standing requirement that the flat pre-6.2 path stay
+  ignored — so a future upstream sync cannot quietly reintroduce it.
+
+### Verified unaffected
+
+- **Skill-name detection.** All 14 superpowers skills kept their names across 6.0–6.3, so
+  the transcript's `superpowers:<skill>` phase capture in `src/transcript.ts` needed no
+  change.
+- **superpowers 6.3.0** (2026-08-12) adds harness support, brainstorming ceremony scaling,
+  and SDD conflict-ruling behavior — nothing structural for hud. Its task batching changes
+  how work is dispatched, not the ledger format, which `SKILL.md:437` still documents as
+  per-task `Task <N>: complete`.
+
+### Known, not fixed
+
+- superpowers deletes a plan workspace only once its final review comes back clean, so an
+  abandoned plan leaves its ledger on disk and keeps the badge active. Gating on ledger
+  mtime was considered and rejected: the ledger is appended per task and per fix round, so
+  any freshness window short enough to expire an abandoned plan would also blink out a
+  live one mid-task. Documented in `README.md` with the manual remedy (delete the stale
+  `.superpowers/sdd/<plan>/` directory) instead.
+- The task-line regex requires a plain integer (`Task <N>:`), matching what `SKILL.md`
+  documents. A hypothetical batched `Task 3-5: complete` line would be undercounted; left
+  strict rather than widened speculatively.
+
+### Tests
+
+1136 tests, **1130 passing, 0 failing, 6 skipped** (eight added, two rewritten). The two
+existing tests in `tests/superpowers-state.test.js` codified the dead flat path and
+checkbox format, so they were rewritten against the plan-scoped layout. New coverage:
+prose-ledger counts and objective, total falling back to task lines when todos are empty,
+the legacy flat file being ignored, newest-plan-workspace-wins, discovery from a
+subdirectory of the repo, the walk stopping at the repo root, checkbox format surviving
+inside a plan workspace, and checkbox lines in a prose ledger counting as findings rather
+than tasks. Verified end-to-end against a real 6.2-format ledger: the project line renders
+`✦ subagent-driven-development 1/2`.
+
+### Bumped
+
+- `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` → `0.9.2`
+
 ## [0.9.1] - 2026-08-11 — MomePP fork (barStyle on model-scoped usage bars)
 
 Patch: one fork-only rendering bug found by a post-release review of the 0.9.0 sync.
