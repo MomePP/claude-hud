@@ -1038,6 +1038,78 @@ for (const lineLayout of ['compact', 'expanded']) {
   });
 }
 
+function inlineDetailContext(lineLayout) {
+  const ctx = baseContext();
+  ctx.config.lineLayout = lineLayout;
+  ctx.config.display.showOrchestrationDetail = true;
+  ctx.config.display.orchestrationDetailLayout = 'inline';
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'subagent-driven-development', active: true,
+    objective: 'demo-webapp-redesign',
+    taskCounts: { total: 16, completed: 1, inProgress: 1 }, agentsActive: 1, updatedAt: null,
+  };
+  return ctx;
+}
+
+test("orchestrationDetailLayout 'inline' folds the objective into the expanded badge", () => {
+  const lines = captureRenderLines(inlineDetailContext('expanded')).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign 1/16')),
+    `got: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' suppresses the separate line in expanded", () => {
+  const lines = captureRenderLines(inlineDetailContext('expanded')).map(stripAnsi);
+  const detailLines = lines.filter((l) => l.includes('demo-webapp-redesign'));
+  assert.equal(detailLines.length, 1, `objective rendered twice: ${JSON.stringify(lines)}`);
+  assert.ok(!lines.some((l) => l.includes('· 1 agents')), `got: ${JSON.stringify(lines)}`);
+});
+
+// The badge lives in renderProjectLine, which the compact layout never calls,
+// so there is nothing inline to fold into and the detail line must survive.
+test("orchestrationDetailLayout 'inline' keeps the detail line in compact", () => {
+  const lines = captureRenderLines(inlineDetailContext('compact')).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail must not vanish in compact: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout defaults to 'line', leaving the badge short", () => {
+  const ctx = inlineDetailContext('expanded');
+  delete ctx.config.display.orchestrationDetailLayout;
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development 1/16')),
+    `badge should stay short: ${JSON.stringify(lines)}`,
+  );
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail line should render: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' keeps the detail line when the badge is hidden", () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.config.display.showOrchestration = false;
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail must not vanish entirely: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' falls back to the detail line with no objective", () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.orchestration.objective = '';
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development (1/16)')),
+    `got: ${JSON.stringify(lines)}`,
+  );
+});
+
 test('renderSessionLine shows custom provider before the model when showProvider is on', () => {
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Claude Opus 4.6' };

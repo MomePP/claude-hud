@@ -4,8 +4,20 @@ import { sanitize as sanitizeDisplayText } from './lines/added-dirs.js';
 // orchestration source: mode/phase, objective, task progress, live agents.
 // ✦ for superpowers, ◆ for OMC. Returns null when disabled or no state.
 export function renderOrchestrationLine(ctx) {
-    if (!ctx.config?.display?.showOrchestrationDetail)
+    const display = ctx.config?.display;
+    if (!display?.showOrchestrationDetail)
         return null;
+    // 'inline' folds the detail into the project-line badge instead; suppress the
+    // line so the objective never renders twice. Only when the badge can actually
+    // carry it: the badge lives in renderProjectLine, which the compact layout
+    // does not use, and showOrchestration can switch it off. In either case the
+    // line stays the sole outlet rather than dropping the detail entirely.
+    if ((display.orchestrationDetailLayout ?? 'line') === 'inline'
+        && (ctx.config?.lineLayout ?? 'expanded') !== 'compact'
+        && (display.showOrchestration ?? true)
+        && ctx.orchestration?.objective) {
+        return null;
+    }
     const o = ctx.orchestration;
     if (!o)
         return null;

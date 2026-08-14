@@ -45,6 +45,7 @@ export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'prompt
  */
 export type FirstLineSegment = 'model' | 'project' | 'advisor' | 'sessionName' | 'version' | 'extra' | 'duration' | 'cost' | 'speed' | 'auth';
 export type AddedDirsLayout = 'inline' | 'line';
+export type OrchestrationDetailLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
@@ -164,6 +165,7 @@ export interface HudConfig {
         orchestrationSource: OrchestrationSourceMode;
         showOrchestration: boolean;
         showOrchestrationDetail: boolean;
+        orchestrationDetailLayout: OrchestrationDetailLayout;
         orchestrationFreshnessMs: number;
         hourCycle: HourCycleMode;
         showClockSeconds: boolean;

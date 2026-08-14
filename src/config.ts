@@ -83,6 +83,9 @@ export type FirstLineSegment =
   | 'auth';
 
 export type AddedDirsLayout = 'inline' | 'line';
+// Where the orchestration detail belongs once showOrchestrationDetail is on:
+// its own line, or folded into the project line's badge. Mirrors AddedDirsLayout.
+export type OrchestrationDetailLayout = 'inline' | 'line';
 export type HudColorName =
   | 'dim'
   | 'red'
@@ -273,6 +276,7 @@ export interface HudConfig {
     orchestrationSource: OrchestrationSourceMode;
     showOrchestration: boolean;
     showOrchestrationDetail: boolean;
+    orchestrationDetailLayout: OrchestrationDetailLayout;
     orchestrationFreshnessMs: number;
     hourCycle: HourCycleMode;
     showClockSeconds: boolean;
@@ -385,6 +389,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     orchestrationSource: 'auto',
     showOrchestration: true,
     showOrchestrationDetail: false,
+    orchestrationDetailLayout: 'line',
     orchestrationFreshnessMs: 900000,
     hourCycle: 'auto',
     showClockSeconds: false,
@@ -1011,6 +1016,10 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       : (typeof legacyDisplay?.showOmcState === 'boolean'
           ? legacyDisplay.showOmcState
           : DEFAULT_CONFIG.display.showOrchestrationDetail),
+    orchestrationDetailLayout: (migrated.display?.orchestrationDetailLayout === 'inline'
+      || migrated.display?.orchestrationDetailLayout === 'line')
+      ? migrated.display.orchestrationDetailLayout
+      : DEFAULT_CONFIG.display.orchestrationDetailLayout,
     orchestrationFreshnessMs: validateOrchestrationFreshnessMs(migrated.display?.orchestrationFreshnessMs),
     hourCycle: validateHourCycle(migrated.display?.hourCycle)
       ? migrated.display.hourCycle

@@ -4,6 +4,65 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-14 — MomePP fork (inline orchestration detail)
+
+Minor: a new fork-only config key, `display.orchestrationDetailLayout`, lets the
+orchestration detail ride on the project-line badge instead of taking its own line. No
+upstream sync. Minor rather than patch because it adds a config key; no default changes,
+so nobody sees a difference without opting in.
+
+### Added — fork
+
+- **`display.orchestrationDetailLayout`** (`'line'` | `'inline'`, default `'line'`) —
+  chooses where the detail goes once `showOrchestrationDetail` is on. `line` keeps today's
+  behavior: a short badge (`✦ <mode> c/t`) on the project line plus a separate detail line.
+  `inline` folds the objective into the badge itself — `✦ <mode>: <objective> c/t` — and
+  suppresses the separate line, so the detail renders in exactly one place. Shape and
+  validator mirror the existing `display.addedDirsLayout` (`src/config.ts:85`), which
+  already pairs a `show*` boolean with an `inline`/`line` placement.
+- The agent count (`· N agents`) stays on the `line` form only. Inline, the harness's own
+  status row below the statusline already reports running agents, so repeating it costs
+  first-line width for nothing.
+
+### Changed — fork
+
+- `src/render/lines/project.ts` — the badge now appends `: <objective>` when the inline
+  layout is active. Because the badge is built in `buildExtras()`, `projectStyle: 'natural'`
+  picks it up with no separate wiring.
+- `src/render/orchestration-line.ts` — self-gates to `null` when the badge is carrying the
+  detail instead.
+
+### Fallbacks (detail is never dropped, only relocated)
+
+`inline` degrades to the separate line, rather than losing the detail, in three cases:
+
+- **`lineLayout: 'compact'`** — the badge lives in `renderProjectLine`, and the compact
+  path renders `renderSessionLine`, which has no orchestration badge at all. There is
+  nothing inline to fold into. (That compact layout shows no badge is a pre-existing gap,
+  untouched here.)
+- **`showOrchestration: false`** — the badge is switched off, so the line is the only outlet.
+- **No objective** — a skill-only phase with no SDD ledger has nothing to inline.
+
+### Default-behavior changes visible on update
+
+- None. `orchestrationDetailLayout` defaults to `'line'`, and `showOrchestrationDetail` is
+  still `false` by default, so both the default HUD and existing detail-line users render
+  exactly as they did in 0.9.3.
+
+### Tests
+
+1146 tests, **1140 passing, 0 failing, 6 skipped** (six added, two rewritten). New coverage
+in `tests/render.test.js`: the objective folding into the expanded badge, the separate line
+being suppressed with the objective rendered exactly once and no agent count, the compact
+fallback, the badge-off fallback, the no-objective fallback, and `'line'` remaining the
+default. The two-layout tests added in 0.9.3 were rewritten once the compact layout was
+found to have no badge to fold into. Verified end-to-end against the maintainer's real
+config: `✦ sdd: demo-webapp-redesign 1/2` on the project line, no detail line.
+
+### Bumped
+
+- `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` → `0.10.0`
+
 ## [0.9.3] - 2026-08-14 — MomePP fork (orchestration detail line in expanded layout)
 
 Patch: `display.showOrchestrationDetail` was silently inert in the default `expanded`

@@ -136,6 +136,7 @@ export const DEFAULT_CONFIG = {
         orchestrationSource: 'auto',
         showOrchestration: true,
         showOrchestrationDetail: false,
+        orchestrationDetailLayout: 'line',
         orchestrationFreshnessMs: 900000,
         hourCycle: 'auto',
         showClockSeconds: false,
@@ -688,6 +689,10 @@ export function mergeConfig(userConfig) {
             : (typeof legacyDisplay?.showOmcState === 'boolean'
                 ? legacyDisplay.showOmcState
                 : DEFAULT_CONFIG.display.showOrchestrationDetail),
+        orchestrationDetailLayout: (migrated.display?.orchestrationDetailLayout === 'inline'
+            || migrated.display?.orchestrationDetailLayout === 'line')
+            ? migrated.display.orchestrationDetailLayout
+            : DEFAULT_CONFIG.display.orchestrationDetailLayout,
         orchestrationFreshnessMs: validateOrchestrationFreshnessMs(migrated.display?.orchestrationFreshnessMs),
         hourCycle: validateHourCycle(migrated.display?.hourCycle)
             ? migrated.display.hourCycle

@@ -80,10 +80,18 @@ function buildExtras(ctx) {
         push(thinkingColor('∿ thinking', colors));
     }
     if ((display?.showOrchestration ?? true) && ctx.orchestration?.active && ctx.orchestration.mode) {
-        const { source, mode, taskCounts } = ctx.orchestration;
+        const { source, mode, objective, taskCounts } = ctx.orchestration;
         const glyph = source === 'superpowers' ? '✦' : '⚙';
         const progress = taskCounts.total > 0 ? ` ${taskCounts.completed}/${taskCounts.total}` : '';
-        push(dim(`${glyph} ${sanitizeDisplayText(mode)}${progress}`));
+        // With detail on and laid out inline, the badge absorbs the objective and
+        // renderOrchestrationLine stands down — the detail shows here or there,
+        // never both. The agent count stays on the detail line only: the harness
+        // already reports running agents below the statusline.
+        const inlineDetail = display?.showOrchestrationDetail === true
+            && (display?.orchestrationDetailLayout ?? 'line') === 'inline'
+            && !!objective;
+        const objectivePart = inlineDetail ? `: ${sanitizeDisplayText(objective)}` : '';
+        push(dim(`${glyph} ${sanitizeDisplayText(mode)}${objectivePart}${progress}`));
     }
     if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
         const { targetSummary, timestamp } = ctx.transcript.pendingPermission;
