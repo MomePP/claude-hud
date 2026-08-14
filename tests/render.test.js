@@ -1008,6 +1008,36 @@ test('renderProjectLine hides badge when showOrchestration is false', () => {
   assert.ok(!line.includes('executing-plans'), `got: ${line}`);
 });
 
+// The detail line is layout-independent by contract: display.showOrchestrationDetail
+// is documented as a plain opt-in line, with no mention of a layout restriction.
+for (const lineLayout of ['compact', 'expanded']) {
+  test(`orchestration detail line renders in ${lineLayout} layout`, () => {
+    const ctx = baseContext();
+    ctx.config.lineLayout = lineLayout;
+    ctx.config.display.showOrchestrationDetail = true;
+    ctx.orchestration = {
+      source: 'superpowers', mode: 'sdd', active: true, objective: 'herdr-backend',
+      taskCounts: { total: 8, completed: 7, inProgress: 1 }, agentsActive: 0, updatedAt: null,
+    };
+    const lines = captureRenderLines(ctx).map(stripAnsi);
+    assert.ok(
+      lines.some((l) => l.includes('✦ sdd: herdr-backend (7/8)')),
+      `got: ${JSON.stringify(lines)}`,
+    );
+  });
+
+  test(`orchestration detail line stays off by default in ${lineLayout} layout`, () => {
+    const ctx = baseContext();
+    ctx.config.lineLayout = lineLayout;
+    ctx.orchestration = {
+      source: 'superpowers', mode: 'sdd', active: true, objective: 'herdr-backend',
+      taskCounts: { total: 8, completed: 7, inProgress: 1 }, agentsActive: 0, updatedAt: null,
+    };
+    const lines = captureRenderLines(ctx).map(stripAnsi);
+    assert.ok(!lines.some((l) => l.includes('herdr-backend')), `got: ${JSON.stringify(lines)}`);
+  });
+}
+
 test('renderSessionLine shows custom provider before the model when showProvider is on', () => {
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Claude Opus 4.6' };

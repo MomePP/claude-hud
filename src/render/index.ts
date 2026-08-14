@@ -612,6 +612,15 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
     });
   }
 
+  // The detail line has no `elementOrder` slot, so it is appended here rather
+  // than dispatched through renderElementLine — mirroring collectActivityLines
+  // in the compact path. showOrchestrationDetail is documented as a plain
+  // opt-in line, so it must not depend on which layout is active.
+  const orchestrationLine = renderOrchestrationLine(ctx);
+  if (orchestrationLine) {
+    lines.push({ line: orchestrationLine, isActivity: true });
+  }
+
   // Git files line always goes last (pass width so it can hide itself if too narrow)
   const gitFilesLine = renderGitFilesLine(ctx, terminalWidth);
   if (gitFilesLine) {

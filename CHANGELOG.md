@@ -4,6 +4,48 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-08-14 — MomePP fork (orchestration detail line in expanded layout)
+
+Patch: `display.showOrchestrationDetail` was silently inert in the default `expanded`
+layout — a fork-only bug dating to 0.8.0, found while verifying the 0.9.2 release against
+a live config. Fork-only fix, no new config keys, no default flipped.
+
+### Fixed — fork
+
+- `src/render/index.ts` — the orchestration detail line only ever rendered in `compact`
+  layout. `renderOrchestrationLine` was wired into `collectActivityLines` (`index.ts:446`),
+  which `render` calls only on the compact branch (`index.ts:672`). The expanded branch
+  builds its lines from `elementOrder` via `renderElementLine`, whose switch has no
+  orchestration case — and the detail line is not a `HudElement`, so it had no slot to be
+  ordered into. On `lineLayout: "expanded"` (the default) there was therefore no code path
+  that could emit it: setting `showOrchestrationDetail: true` changed nothing.
+  `renderExpanded` now appends the line before the git-files line, marked
+  `isActivity: true` so the separator logic groups it with the other activity lines,
+  mirroring what the compact path already did.
+- Neither `README.md` nor `CLAUDE.md` documented a layout restriction — both describe the
+  key as a plain opt-in line — so the contract was layout-independent and the expanded
+  path was simply missing it.
+
+### Default-behavior changes visible on update
+
+- None for users on defaults: `showOrchestrationDetail` is still `false` by default. Users
+  who had already set it to `true` on `expanded` will start seeing the line they asked for,
+  e.g. `✦ sdd: herdr-backend (7/8)` — mode, objective from the ledger identity line, and
+  task counts.
+
+### Tests
+
+1140 tests, **1134 passing, 0 failing, 6 skipped** (four added). `tests/render.test.js`
+gains a two-layout loop asserting the detail line renders under both `compact` and
+`expanded` when enabled, and stays absent under both when left at its default. The
+expanded case was confirmed to fail against the unfixed build before the fix landed —
+one failure, expanded only. Verified end-to-end against the maintainer's real
+`expanded` config and a live 6.2 plan-scoped ledger.
+
+### Bumped
+
+- `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` → `0.9.3`
+
 ## [0.9.2] - 2026-08-14 — MomePP fork (superpowers 6.2 plan-scoped SDD ledger)
 
 Patch: the superpowers orchestration reader tracked a state file that superpowers
