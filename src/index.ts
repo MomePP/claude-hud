@@ -5,6 +5,7 @@ import { countConfigs } from "./config-reader.js";
 import { getGitStatus } from "./git.js";
 import { getJjStatus, isJjRepo } from "./jj.js";
 import { loadConfig } from "./config.js";
+import { setDimStyle } from "./render/colors.js";
 import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
@@ -148,6 +149,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       // Running without stdin - this happens during setup verification
       const config = await deps.loadConfig();
       setLanguage(config.language);
+    setDimStyle(config.colors?.dim);
       const isMacOS = process.platform === "darwin";
       deps.log(t("init.initializing"));
       if (isMacOS) {
@@ -169,6 +171,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
 
     const config = await deps.loadConfig();
     setLanguage(config.language);
+    setDimStyle(config.colors?.dim);
     const gitStatus = await resolveVcsStatus(deps, config, stdin.cwd);
 
     let usageData: RenderContext["usageData"] = null;

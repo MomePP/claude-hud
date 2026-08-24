@@ -1,10 +1,11 @@
-import type { HudColorOverrides } from '../config.js';
+import type { HudColorValue, HudColorOverrides } from '../config.js';
 export declare const RESET = "\u001B[0m";
 export declare function green(text: string): string;
 export declare function yellow(text: string): string;
 export declare function red(text: string): string;
 export declare function cyan(text: string): string;
 export declare function magenta(text: string): string;
+export declare function setDimStyle(value: HudColorValue | undefined): void;
 export declare function dim(text: string): string;
 export declare function claudeOrange(text: string): string;
 export declare function model(text: string, colors?: Partial<HudColorOverrides>): string;

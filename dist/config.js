@@ -156,6 +156,7 @@ export const DEFAULT_CONFIG = {
         git: 'magenta',
         gitBranch: 'brightMagenta',
         label: 'dim',
+        dim: 'dim',
         custom: 208,
         thinking: 'dim',
         duration: 'dim',
@@ -744,6 +745,9 @@ export function mergeConfig(userConfig) {
         label: validateColorValue(migrated.colors?.label)
             ? migrated.colors.label
             : DEFAULT_CONFIG.colors.label,
+        dim: validateColorValue(migrated.colors?.dim)
+            ? migrated.colors.dim
+            : DEFAULT_CONFIG.colors.dim,
         custom: validateColorValue(migrated.colors?.custom)
             ? migrated.colors.custom
             : DEFAULT_CONFIG.colors.custom,

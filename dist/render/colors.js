@@ -62,8 +62,22 @@ export function cyan(text) {
 export function magenta(text) {
     return colorize(text, MAGENTA);
 }
+// Resolved once per run rather than passed to every call. `dim()` has ~16 call
+// sites, most without a `colors` argument in scope, and threading config into
+// all of them to solve one rendering problem is not worth the churn — so this
+// mirrors setLanguage() and is set alongside it.
+//
+// The rendering problem: terminals implement dim by blending the foreground
+// against the background, which means the cell background has to be painted to
+// blend against. On a transparent terminal every dim span therefore shows up as
+// an opaque box. Setting `colors.dim` to a concrete colour avoids SGR 2
+// entirely; leaving it unset keeps the default dim everywhere.
+let dimStyle = DIM;
+export function setDimStyle(value) {
+    dimStyle = resolveAnsi(value, DIM);
+}
 export function dim(text) {
-    return colorize(text, DIM);
+    return colorize(text, dimStyle);
 }
 export function claudeOrange(text) {
     return colorize(text, CLAUDE_ORANGE);

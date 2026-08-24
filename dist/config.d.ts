@@ -60,6 +60,13 @@ export interface HudColorOverrides {
     git: HudColorValue;
     gitBranch: HudColorValue;
     label: HudColorValue;
+    /**
+     * Style for every `dim()` span — separators, counts, overflow markers and the
+     * connectives in the git and project segments. Defaults to SGR 2, which
+     * terminals render by blending against the background and therefore paint an
+     * opaque cell background for; set a concrete colour on a transparent terminal.
+     */
+    dim: HudColorValue;
     custom: HudColorValue;
     thinking: HudColorValue;
     duration: HudColorValue;

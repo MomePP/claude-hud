@@ -110,6 +110,13 @@ export interface HudColorOverrides {
   git: HudColorValue;
   gitBranch: HudColorValue;
   label: HudColorValue;
+  /**
+   * Style for every `dim()` span — separators, counts, overflow markers and the
+   * connectives in the git and project segments. Defaults to SGR 2, which
+   * terminals render by blending against the background and therefore paint an
+   * opaque cell background for; set a concrete colour on a transparent terminal.
+   */
+  dim: HudColorValue;
   custom: HudColorValue;
   thinking: HudColorValue;
   duration: HudColorValue;
@@ -424,6 +431,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     git: 'magenta',
     gitBranch: 'brightMagenta',
     label: 'dim',
+    dim: 'dim',
     custom: 208,
     thinking: 'dim',
     duration: 'dim',
@@ -1087,6 +1095,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     label: validateColorValue(migrated.colors?.label)
       ? migrated.colors.label
       : DEFAULT_CONFIG.colors.label,
+    dim: validateColorValue(migrated.colors?.dim)
+      ? migrated.colors.dim
+      : DEFAULT_CONFIG.colors.dim,
     custom: validateColorValue(migrated.colors?.custom)
       ? migrated.colors.custom
       : DEFAULT_CONFIG.colors.custom,
