@@ -140,7 +140,8 @@ export function quotaBar(percent, width = 10, colors, style) {
     const chars = barChars(style);
     const filledChar = colors?.barFilled ?? chars.filled;
     const emptyChar = colors?.barEmpty ?? chars.empty;
-    return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
+    const emptyColor = resolveAnsi(colors?.barEmptyColor, DIM);
+    return `${color}${filledChar.repeat(filled)}${emptyColor}${emptyChar.repeat(empty)}${RESET}`;
 }
 export function coloredBar(percent, width = 10, colors, style, thresholds) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
@@ -151,6 +152,7 @@ export function coloredBar(percent, width = 10, colors, style, thresholds) {
     const chars = barChars(style);
     const filledChar = colors?.barFilled ?? chars.filled;
     const emptyChar = colors?.barEmpty ?? chars.empty;
-    return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
+    const emptyColor = resolveAnsi(colors?.barEmptyColor, DIM);
+    return `${color}${filledChar.repeat(filled)}${emptyColor}${emptyChar.repeat(empty)}${RESET}`;
 }
 //# sourceMappingURL=colors.js.map

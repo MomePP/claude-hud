@@ -116,6 +116,13 @@ export interface HudColorOverrides {
   orchestration: HudColorValue;
   barFilled?: string;
   barEmpty?: string;
+  /**
+   * Colour of the bar's unfilled track. Defaults to SGR 2 (dim), which
+   * terminals render by blending the foreground against the background — on a
+   * transparent terminal that forces the cell background to be painted opaque,
+   * so the track shows up as a solid box. Set an explicit colour to avoid it.
+   */
+  barEmptyColor?: HudColorValue;
 }
 
 export const DEFAULT_ELEMENT_ORDER: HudElement[] = [
@@ -1086,6 +1093,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       : undefined,
     barEmpty: validateBarChar(migrated.colors?.barEmpty)
       ? migrated.colors.barEmpty
+      : undefined,
+    barEmptyColor: validateColorValue(migrated.colors?.barEmptyColor)
+      ? migrated.colors.barEmptyColor
       : undefined,
   };
 

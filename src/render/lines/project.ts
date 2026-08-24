@@ -312,7 +312,10 @@ function renderNaturalProjectLine(ctx: RenderContext): string | null {
     const linkedBranch = safeHyperlink(vcs.branchUrl, coloredBranch);
     const branchGlyph = display?.branchGlyph ?? '';
     const branchGlyphPart = branchGlyph ? `${gitBranchColor(branchGlyph, colors)} ` : '';
-    const gitTokens: string[] = [`${dim('on')} ${branchGlyphPart}${linkedBranch}`];
+    // `label` rather than `dim`: the connective reads as a label, and routing it
+    // through the override lets a transparent-terminal setup replace SGR 2,
+    // which terminals paint an opaque cell background for.
+    const gitTokens: string[] = [`${label('on', colors)} ${branchGlyphPart}${linkedBranch}`];
 
     if (vcs.ahead > 0) gitTokens.push(formatAheadCount(vcs.ahead, gitConfig, colors));
     if (vcs.behind > 0) gitTokens.push(gitBranchColor(`↓${vcs.behind}`, colors));
