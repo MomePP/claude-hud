@@ -180,6 +180,13 @@ export interface HudConfig {
     showAheadBehind: boolean;
     showFileStats: boolean;
     showFileList: boolean;
+    /**
+     * Wrap the branch name in an OSC 8 hyperlink to its forge page. Terminals
+     * mark link cells with a decoration, and on a transparent terminal that
+     * decoration is drawn against an opaque cell background, so the branch
+     * shows up as a solid box. Turn this off to keep the branch plain text.
+     */
+    linkBranch: boolean;
     branchOverflow: GitBranchOverflowMode;
     pushWarningThreshold: number;
     pushCriticalThreshold: number;
@@ -316,6 +323,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     showAheadBehind: false,
     showFileStats: false,
     showFileList: false,
+    linkBranch: true,
     branchOverflow: 'truncate',
     pushWarningThreshold: 0,
     pushCriticalThreshold: 0,
@@ -790,6 +798,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
     showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
       ? migrated.gitStatus.showFileList
       : DEFAULT_CONFIG.gitStatus.showFileList,
+    linkBranch: typeof migrated.gitStatus?.linkBranch === 'boolean'
+      ? migrated.gitStatus.linkBranch
+      : DEFAULT_CONFIG.gitStatus.linkBranch,
     branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
       ? migrated.gitStatus.branchOverflow
       : DEFAULT_CONFIG.gitStatus.branchOverflow,

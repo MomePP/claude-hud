@@ -201,7 +201,7 @@ function renderPipesProjectLine(ctx) {
     if (vcs) {
         const branchText = vcs.branch + (vcs.dirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
-        const linkedBranch = safeHyperlink(vcs.branchUrl, coloredBranch);
+        const linkedBranch = gitConfig.linkBranch ? safeHyperlink(vcs.branchUrl, coloredBranch) : coloredBranch;
         const gitInner = [linkedBranch];
         if (vcs.ahead > 0)
             gitInner.push(formatAheadCount(vcs.ahead, gitConfig, colors));
@@ -275,7 +275,7 @@ function renderNaturalProjectLine(ctx) {
     if (vcs) {
         const branchText = vcs.branch + (vcs.dirty ? '*' : '');
         const coloredBranch = gitBranchColor(branchText, colors);
-        const linkedBranch = safeHyperlink(vcs.branchUrl, coloredBranch);
+        const linkedBranch = gitConfig.linkBranch ? safeHyperlink(vcs.branchUrl, coloredBranch) : coloredBranch;
         const branchGlyph = display?.branchGlyph ?? '';
         const branchGlyphPart = branchGlyph ? `${gitBranchColor(branchGlyph, colors)} ` : '';
         // `label` rather than `dim`: the connective reads as a label, and routing it
