@@ -249,6 +249,7 @@ Simplified and Traditional Chinese HUD labels are available as explicit opt-ins.
 | `colors.usage` | color value | `brightBlue` | Base color for usage bars and percentages below warning thresholds |
 | `colors.warning` | color value | `yellow` | Warning color for context thresholds and usage warning text |
 | `colors.usageWarning` | color value | `brightMagenta` | Warning color for usage bars and percentages near their threshold |
+| `colors.sevenDay` | color value | _(unset)_ | One colour for the weekly (7-day) usage window at **every** level. Left unset, weekly shares the three-step ladder with the 5-hour window and the memory bar — `colors.usage` below 75%, `colors.usageWarning` to 89%, `colors.critical` above — which leaves the two usage windows indistinguishable except by their label most of the time. Setting it pins weekly to its own colour and **opts it out of the ladder**, so it no longer escalates at 75% or 90%. |
 | `colors.critical` | color value | `red` | Critical color for limit-reached states and critical thresholds |
 | `colors.model` | color value | `green` | Color for the model badge such as `[Opus]`. Default mirrors starship runtime/version modules so model, project, and branch each get a distinct color. |
 | `colors.project` | color value | `cyan` | Color for the project path. Default matches starship `directory`. |

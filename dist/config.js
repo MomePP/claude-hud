@@ -794,6 +794,9 @@ export function mergeConfig(userConfig) {
         barEmptyColor: validateColorValue(migrated.colors?.barEmptyColor)
             ? migrated.colors.barEmptyColor
             : undefined,
+        sevenDay: validateColorValue(migrated.colors?.sevenDay)
+            ? migrated.colors.sevenDay
+            : undefined,
     };
     return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, projectLineOrder, gitStatus, jjStatus, display, colors };
 }

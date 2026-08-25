@@ -88,7 +88,7 @@ export function renderUsageLine(ctx, labelOptions = {}) {
             ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, FIVE_HOUR_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
             : null;
         const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-            ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
+            ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, sevenDayColors(colors), usageValueMode, wallClockOpts)
             : null;
         if (fiveHourPart && sevenDayPart) {
             return appendBalance(`${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
@@ -116,7 +116,7 @@ export function renderUsageLine(ctx, labelOptions = {}) {
             percent: sevenDay,
             resetAt: ctx.usageData.sevenDayResetAt,
             windowMs: SEVEN_DAY_WINDOW_MS,
-            colors,
+            colors: sevenDayColors(colors),
             usageBarEnabled,
             barWidth,
             barStyle,
@@ -154,7 +154,7 @@ export function renderUsageLine(ctx, labelOptions = {}) {
             percent: sevenDay,
             resetAt: ctx.usageData.sevenDayResetAt,
             windowMs: SEVEN_DAY_WINDOW_MS,
-            colors,
+            colors: sevenDayColors(colors),
             usageBarEnabled,
             barWidth,
             barStyle,
@@ -168,6 +168,22 @@ export function renderUsageLine(ctx, labelOptions = {}) {
         return appendBalance(`${usageLabel} ${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
     }
     return appendBalance(`${usageLabel} ${fiveHourPart}${scopedSuffix}`, balanceLabel);
+}
+/**
+ * The colour set the weekly window renders with.
+ *
+ * `colors.sevenDay` pins all three ladder keys to one value, which is what
+ * takes the weekly window out of the 75/90 escalation. The bar and the value
+ * both read the ladder through getQuotaColor, so overriding its inputs covers
+ * them together and no shared colour helper needs a new parameter. Returns the
+ * caller's colours untouched when the override is unset.
+ */
+export function sevenDayColors(colors) {
+    const override = colors?.sevenDay;
+    if (override === undefined) {
+        return colors;
+    }
+    return { ...colors, usage: override, usageWarning: override, critical: override };
 }
 /**
  * True when the weekly window should be split onto its own line. Compact usage
@@ -214,7 +230,7 @@ export function renderWeeklyUsageLine(ctx, labelOptions = {}) {
         percent: sevenDay,
         resetAt: ctx.usageData.sevenDayResetAt,
         windowMs: SEVEN_DAY_WINDOW_MS,
-        colors,
+        colors: sevenDayColors(colors),
         usageBarEnabled: display?.usageBarEnabled ?? true,
         barWidth: getAdaptiveBarWidth(),
         barStyle: display?.barStyle,

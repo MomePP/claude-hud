@@ -99,6 +99,17 @@ export interface HudColorOverrides {
      * so the track shows up as a solid box. Set an explicit colour to avoid it.
      */
     barEmptyColor?: HudColorValue;
+    /**
+     * One colour for the weekly (7-day) usage window, at every level.
+     *
+     * Left unset, the weekly window shares the three-step ladder with the 5-hour
+     * window and the memory bar — `colors.usage` below 75%, `colors.usageWarning`
+     * to 89%, `colors.critical` above — which makes the two usage windows
+     * indistinguishable except by their label most of the time. Setting this
+     * pins the weekly window to a colour of its own and **opts it out of the
+     * ladder entirely**, so it no longer escalates at 75% or 90%.
+     */
+    sevenDay?: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];

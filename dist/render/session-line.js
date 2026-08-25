@@ -5,6 +5,7 @@ import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, lab
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { renderPromptCacheLine } from './lines/prompt-cache.js';
+import { sevenDayColors } from './lines/usage.js';
 import { renderSessionTimeLine } from './lines/session-time.js';
 import { renderAdvisorLine } from './lines/advisor.js';
 import { t } from '../i18n/index.js';
@@ -211,7 +212,7 @@ export function renderSessionLine(ctx) {
                         : null;
                     const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
                     const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-                        ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors, usageValueMode, wallClockOpts)
+                        ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, sevenDayColors(colors), usageValueMode, wallClockOpts)
                         : null;
                     if (fiveHourPart && sevenDayPart) {
                         push(fiveHourPart);
@@ -230,7 +231,7 @@ export function renderSessionLine(ctx) {
                         label: t('label.weekly'),
                         percent: sevenDay,
                         resetAt: ctx.usageData.sevenDayResetAt,
-                        colors,
+                        colors: sevenDayColors(colors),
                         usageBarEnabled,
                         barWidth,
                         barStyle: display?.barStyle,
@@ -263,7 +264,7 @@ export function renderSessionLine(ctx) {
                             label: t('label.weekly'),
                             percent: sevenDay,
                             resetAt: ctx.usageData.sevenDayResetAt,
-                            colors,
+                            colors: sevenDayColors(colors),
                             usageBarEnabled,
                             barWidth,
                             barStyle: display?.barStyle,

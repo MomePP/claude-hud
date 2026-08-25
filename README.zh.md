@@ -225,6 +225,7 @@ Claude Code → stdin JSON → claude-hud → stdout → 在终端中显示
 | `colors.usage` | 颜色值 | `brightBlue` | 使用率进度条和低于警告阈值时百分比的颜色 |
 | `colors.warning` | 颜色值 | `yellow` | 上下文阈值和使用率警告文本的警告颜色 |
 | `colors.usageWarning` | 颜色值 | `brightMagenta` | 使用率进度条和接近阈值时百分比的警告颜色 |
+| `colors.sevenDay` | 颜色值 | _(未设置)_ | 为 7 天使用率窗口在**所有**区间指定统一颜色。未设置时，7 天窗口与 5 小时窗口、内存条共用三段阶梯（<75% 用 `colors.usage`，75–89% 用 `colors.usageWarning`，≥90% 用 `colors.critical`），因此多数时候两个用量窗口只能靠标签区分。设置后 7 天窗口固定为该颜色并**退出该阶梯**，不再在 75% 或 90% 升级。 |
 | `colors.critical` | 颜色值 | `red` | 达到限制状态和严重阈值的颜色 |
 | `colors.model` | 颜色值 | `cyan` | 模型徽章颜色，如 `[Opus]` |
 | `colors.project` | 颜色值 | `yellow` | 项目路径的颜色 |

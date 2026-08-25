@@ -4,6 +4,61 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-25 — MomePP fork (per-window weekly colour)
+
+Minor: one new optional fork colour key, `colors.sevenDay`, unset by default so
+nothing changes without opting in. The weekly and 5-hour windows shared a single
+three-step colour ladder, which meant that below 75% they rendered in exactly the
+same colour and were distinguishable only by their label — a real problem once
+`sevenDayThreshold: 0` puts weekly on screen permanently.
+
+### Added — fork
+
+- **`colors.sevenDay`** (colour value, unset by default) — one colour for the
+  weekly (7-day) window at every level. Setting it pins weekly to its own colour
+  and **opts it out of the 75/90 ladder**, so it no longer escalates to
+  `usageWarning` or `critical`. Follows the fork's optional-colour-key precedent
+  (`colors.barFilled` / `barEmpty` / `barEmptyColor`): `HudColorValue | undefined`
+  with no default, and an invalid value is dropped rather than defaulted.
+  `src/config.ts`, `src/render/lines/usage.ts`.
+- **`sevenDayColors()`** — exported helper that returns the caller's colours
+  untouched when the override is unset, and otherwise pins `usage`,
+  `usageWarning` and `critical` to the override. The bar and the value both read
+  the ladder through `getQuotaColor`, so overriding its inputs covers them
+  together and no shared colour helper needed a new parameter.
+  `src/render/lines/usage.ts`.
+
+### Changed — fork
+
+- All six weekly render paths route their colours through the helper: the inline
+  weekly part, the weekly-only session, the separate weekly line
+  (`renderWeeklyUsageLine`), the compact `7d` part, and both weekly branches in
+  the compact session line. The 5-hour window, the memory bar and model-scoped
+  windows are deliberately **not** routed through it — model-scoped windows carry
+  a `7d` duration label but are a different quota, so they keep the ladder.
+
+### Default-behavior changes visible on update
+
+None. `colors.sevenDay` is unset by default and the helper is a pass-through in
+that case, so output is byte-identical to 0.12.0 until the key is set.
+
+### Tests
+
+1226 pass, 0 fail, 6 skipped (1232 total), up from 1216. New
+`tests/seven-day-color.test.js` covers validation (hex, 256-colour and named
+values accepted; invalid dropped to undefined rather than defaulted), the
+unset ladder still walking 75/90, the override holding across all three bands,
+the ladder colours no longer leaking onto the weekly segment, the 5-hour window
+keeping its own colours, and all three of the separate-line, compact and
+weekly-only paths. Six of the ten fail against the pre-fix renderer — including
+the 5-hour isolation test, which caught an over-broad edit during implementation.
+
+### Bumped
+
+- `package.json` → `0.13.0`
+- `.claude-plugin/plugin.json` → `0.13.0`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.13.0`
+
 ## [0.12.0] - 2026-08-25 — MomePP fork (weekly usage on its own line)
 
 Minor: one new fork option, `display.sevenDayLayout`, defaulting to the current

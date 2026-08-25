@@ -117,7 +117,7 @@ export function renderUsageLine(
       ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, FIVE_HOUR_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
       : null;
     const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
+      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, sevenDayColors(colors), usageValueMode, wallClockOpts)
       : null;
 
     if (fiveHourPart && sevenDayPart) {
@@ -149,7 +149,7 @@ export function renderUsageLine(
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       windowMs: SEVEN_DAY_WINDOW_MS,
-      colors,
+      colors: sevenDayColors(colors),
       usageBarEnabled,
       barWidth,
       barStyle,
@@ -189,7 +189,7 @@ export function renderUsageLine(
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       windowMs: SEVEN_DAY_WINDOW_MS,
-      colors,
+      colors: sevenDayColors(colors),
       usageBarEnabled,
       barWidth,
       barStyle,
@@ -204,6 +204,25 @@ export function renderUsageLine(
   }
 
   return appendBalance(`${usageLabel} ${fiveHourPart}${scopedSuffix}`, balanceLabel);
+}
+
+/**
+ * The colour set the weekly window renders with.
+ *
+ * `colors.sevenDay` pins all three ladder keys to one value, which is what
+ * takes the weekly window out of the 75/90 escalation. The bar and the value
+ * both read the ladder through getQuotaColor, so overriding its inputs covers
+ * them together and no shared colour helper needs a new parameter. Returns the
+ * caller's colours untouched when the override is unset.
+ */
+export function sevenDayColors(
+  colors: RenderContext["config"]["colors"],
+): RenderContext["config"]["colors"] {
+  const override = colors?.sevenDay;
+  if (override === undefined) {
+    return colors;
+  }
+  return { ...colors, usage: override, usageWarning: override, critical: override };
 }
 
 /**
@@ -265,7 +284,7 @@ export function renderWeeklyUsageLine(
     percent: sevenDay,
     resetAt: ctx.usageData.sevenDayResetAt,
     windowMs: SEVEN_DAY_WINDOW_MS,
-    colors,
+    colors: sevenDayColors(colors),
     usageBarEnabled: display?.usageBarEnabled ?? true,
     barWidth: getAdaptiveBarWidth(),
     barStyle: display?.barStyle,
