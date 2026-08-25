@@ -5,7 +5,7 @@ import { renderSkillsLine, renderMcpLine } from './skills-mcp-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
 import { renderOrchestrationLine } from './orchestration-line.js';
-import { renderIdentityLine, renderProjectLine, renderAddedDirsLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderCompactionsLine, renderSessionTimeLine, } from './lines/index.js';
+import { renderIdentityLine, renderProjectLine, renderAddedDirsLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderWeeklyUsageLine, renderMemoryLine, renderSessionTokensLine, renderCompactionsLine, renderSessionTimeLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
 import { codePointCellWidth, isCjkAmbiguousWide } from './width.js';
@@ -419,6 +419,19 @@ function renderExpanded(ctx, terminalWidth = null) {
         : undefined;
     const seen = new Set();
     const lines = [];
+    // `display.sevenDayLayout: 'line'` splits the weekly window out of the usage
+    // element. It has no elementOrder slot of its own, so it is emitted directly
+    // beneath whichever row carried `usage` — the same shape as the orchestration
+    // detail line, which is appended rather than dispatched.
+    const pushWeeklyUsageLine = (rowElements) => {
+        if (!rowElements.includes('usage')) {
+            return;
+        }
+        const weeklyLine = renderWeeklyUsageLine(ctx, separateMemoryLabelOptions);
+        if (weeklyLine) {
+            lines.push({ line: weeklyLine, isActivity: false });
+        }
+    };
     for (let index = 0; index < elementOrder.length; index += 1) {
         const element = elementOrder[index];
         if (seen.has(element)) {
@@ -465,6 +478,7 @@ function renderExpanded(ctx, terminalWidth = null) {
                             line: alignedLine ?? combinedLine,
                             isActivity: renderedGroupLines.some(({ element: groupedElement }) => ACTIVITY_ELEMENTS.has(groupedElement)),
                         });
+                        pushWeeklyUsageLine(renderedGroupLines.map(({ element: e }) => e));
                     }
                     else {
                         for (const { element: groupedElement, line } of renderedGroupLines) {
@@ -476,6 +490,7 @@ function renderExpanded(ctx, terminalWidth = null) {
                                 line: stackedLine,
                                 isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
                             });
+                            pushWeeklyUsageLine([groupedElement]);
                         }
                     }
                 }
@@ -486,6 +501,7 @@ function renderExpanded(ctx, terminalWidth = null) {
                         line: separateLine,
                         isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
                     });
+                    pushWeeklyUsageLine([groupedElement]);
                 }
                 continue;
             }
@@ -499,6 +515,7 @@ function renderExpanded(ctx, terminalWidth = null) {
             line,
             isActivity: ACTIVITY_ELEMENTS.has(element),
         });
+        pushWeeklyUsageLine([element]);
     }
     // The detail line has no `elementOrder` slot, so it is appended here rather
     // than dispatched through renderElementLine — mirroring collectActivityLines

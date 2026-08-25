@@ -4,6 +4,67 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-25 — MomePP fork (weekly usage on its own line)
+
+Minor: one new fork option, `display.sevenDayLayout`, defaulting to the current
+behavior. A merged Context/Usage row already runs long, and appending the weekly
+window inline pushes it past a typical terminal in exactly the week you most want
+to read it — 191 columns in a representative session with `promptCache` merged in.
+Splitting the weekly window onto its own line keeps the primary row at a stable
+width and only costs a line in the weeks usage is actually high.
+
+### Added — fork
+
+- **`display.sevenDayLayout`** (`inline` | `line`, default `inline`) — where the
+  weekly (7-day) window renders once it crosses `display.sevenDayThreshold`.
+  `inline` keeps today's `Usage … | Weekly …` join. `line` drops it from the usage
+  line and emits it as its own line directly beneath whichever row carried the
+  `usage` element. `src/config.ts`, `src/render/lines/usage.ts`,
+  `src/render/index.ts`.
+- **`renderWeeklyUsageLine`** — new exported renderer backing that layout, with
+  the same visibility gates as the usage line it follows (`showUsage`,
+  `shouldHideUsage`, `usageThreshold`, `sevenDayThreshold`, limit-reached).
+  `src/render/lines/usage.ts`.
+
+### Changed — fork
+
+- `renderUsageLine` omits the inline weekly part under `sevenDayLayout: 'line'`.
+  It still returns exactly one line in both layouts: merge groups join elements
+  into a single row, so a multi-line return would land mid-row and break the join
+  (`src/render/index.ts` joins `renderedGroupLines` with a separator). This is why
+  the weekly line is emitted by the coordinator rather than embedded in the usage
+  string.
+- The weekly line is appended at all four row-emit sites (merged row, stacked
+  fallback, single-element group, ungrouped element) so it follows `usage`
+  wherever `elementOrder` and `mergeGroups` put it, rather than being appended at
+  the end of the HUD.
+
+### Fallbacks (deliberate)
+
+- **`display.usageCompact`** — stays inline. Compact usage exists to be one terse
+  row, and its `7d` part carries no label to anchor a separate line.
+- **A session with no 5-hour window** — stays inline; there is nothing to split
+  the weekly window away from.
+- **Below `sevenDayThreshold`** — neither line shows it, exactly as before.
+
+### Default-behavior changes visible on update
+
+None. `sevenDayLayout` defaults to `inline`, which is byte-identical to 0.11.0
+output. Opting in is a one-key change.
+
+### Tests
+
+1202 pass, 0 fail, 6 skipped (1208 total), up from 1190. New
+`tests/seven-day-layout.test.js` covers config validation and defaulting, the
+inline/line split, the threshold gate on both sides, single-line invariants for
+both renderers (the merge-group constraint), and all three fallbacks.
+
+### Bumped
+
+- `package.json` → `0.12.0`
+- `.claude-plugin/plugin.json` → `0.12.0`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.12.0`
+
 ## [0.11.0] - 2026-08-25 — MomePP fork (upstream sync onto ef5f1c8, 0.8.0 + transparent-terminal theming)
 
 Rebase-reconstruct of the fork onto the current upstream base, replacing the 0.7.0

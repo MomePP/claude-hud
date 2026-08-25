@@ -57,6 +57,13 @@ export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'prompt
  */
 export type FirstLineSegment = 'model' | 'project' | 'advisor' | 'sessionName' | 'version' | 'extra' | 'duration' | 'cost' | 'speed' | 'auth';
 export type AddedDirsLayout = 'inline' | 'line';
+/**
+ * Where the weekly (7-day) usage window renders once it crosses
+ * `display.sevenDayThreshold`. `inline` appends it to the usage line after the
+ * 5-hour window; `line` gives it its own line below, which keeps a merged
+ * Context/Usage row from growing past the terminal width in a heavy week.
+ */
+export type SevenDayLayout = 'inline' | 'line';
 export type OrchestrationDetailLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
@@ -177,6 +184,7 @@ export interface HudConfig {
         contextCriticalThreshold: number;
         usageThreshold: number;
         sevenDayThreshold: number;
+        sevenDayLayout: SevenDayLayout;
         environmentThreshold: number;
         externalUsagePath: string;
         externalUsageWritePath: string;

@@ -100,6 +100,14 @@ export type FirstLineSegment =
   | 'auth';
 
 export type AddedDirsLayout = 'inline' | 'line';
+
+/**
+ * Where the weekly (7-day) usage window renders once it crosses
+ * `display.sevenDayThreshold`. `inline` appends it to the usage line after the
+ * 5-hour window; `line` gives it its own line below, which keeps a merged
+ * Context/Usage row from growing past the terminal width in a heavy week.
+ */
+export type SevenDayLayout = 'inline' | 'line';
 // Where the orchestration detail belongs once showOrchestrationDetail is on:
 // its own line, or folded into the project line's badge. Mirrors AddedDirsLayout.
 export type OrchestrationDetailLayout = 'inline' | 'line';
@@ -284,6 +292,8 @@ export interface HudConfig {
     contextCriticalThreshold: number;
     usageThreshold: number;
     sevenDayThreshold: number;
+    // Where the weekly window goes once it crosses sevenDayThreshold.
+    sevenDayLayout: SevenDayLayout;
     environmentThreshold: number;
     externalUsagePath: string;
     externalUsageWritePath: string;
@@ -411,6 +421,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     contextCriticalThreshold: 85,
     usageThreshold: 0,
     sevenDayThreshold: 80,
+    sevenDayLayout: 'inline',
     environmentThreshold: 0,
     externalUsagePath: '',
     externalUsageWritePath: '',
@@ -1026,6 +1037,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       migrated.display?.sevenDayThreshold,
       DEFAULT_CONFIG.display.sevenDayThreshold,
     ),
+    sevenDayLayout: (migrated.display?.sevenDayLayout === 'inline' || migrated.display?.sevenDayLayout === 'line')
+      ? migrated.display.sevenDayLayout
+      : DEFAULT_CONFIG.display.sevenDayLayout,
     environmentThreshold: validateThreshold(
       migrated.display?.environmentThreshold,
       DEFAULT_CONFIG.display.environmentThreshold,

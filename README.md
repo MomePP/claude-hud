@@ -192,6 +192,7 @@ Simplified and Traditional Chinese HUD labels are available as explicit opt-ins.
 | `display.usageValue` | `percent` \| `remaining` | `percent` | Usage display format (`25%` used, or `75%` remaining) |
 | `display.usageBarEnabled` | boolean | true | Display usage as visual bar instead of text |
 | `display.sevenDayThreshold` | 0-100 | 80 | Show 7-day usage when >= threshold (0 = always) |
+| `display.sevenDayLayout` | `inline` \| `line` | `inline` | Where the weekly window goes once it crosses `sevenDayThreshold`. `inline` appends it to the usage line after the 5-hour window (current behavior); `line` gives it its own line below, which keeps a merged Context/Usage row from outgrowing the terminal in a heavy week. Falls back to inline under `display.usageCompact` and for a session with no 5-hour window (nothing to split away from). |
 | `display.contextWarningThreshold` | 0-100 | 70 | Context-bar percentage at which colours switch from `colors.context` to `colors.warning`. Inherited from upstream. |
 | `display.contextCriticalThreshold` | 0-100 | 85 | Context-bar percentage at which colours switch to `colors.critical` and the token breakdown unlocks. Inherited from upstream. |
 | `display.usageThreshold` | 0-100 | 0 | Hide the 5-hour usage bar/text until usage reaches this percentage (`0` = always show). Inherited from upstream. |

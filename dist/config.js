@@ -119,6 +119,7 @@ export const DEFAULT_CONFIG = {
         contextCriticalThreshold: 85,
         usageThreshold: 0,
         sevenDayThreshold: 80,
+        sevenDayLayout: 'inline',
         environmentThreshold: 0,
         externalUsagePath: '',
         externalUsageWritePath: '',
@@ -660,6 +661,9 @@ export function mergeConfig(userConfig) {
         contextCriticalThreshold: validateContextThreshold(migrated.display?.contextCriticalThreshold, DEFAULT_CONFIG.display.contextCriticalThreshold),
         usageThreshold: validateThreshold(migrated.display?.usageThreshold, DEFAULT_CONFIG.display.usageThreshold),
         sevenDayThreshold: validateThreshold(migrated.display?.sevenDayThreshold, DEFAULT_CONFIG.display.sevenDayThreshold),
+        sevenDayLayout: (migrated.display?.sevenDayLayout === 'inline' || migrated.display?.sevenDayLayout === 'line')
+            ? migrated.display.sevenDayLayout
+            : DEFAULT_CONFIG.display.sevenDayLayout,
         environmentThreshold: validateThreshold(migrated.display?.environmentThreshold, DEFAULT_CONFIG.display.environmentThreshold),
         externalUsagePath: validateOptionalPath(migrated.display?.externalUsagePath),
         externalUsageWritePath: validateOptionalPath(migrated.display?.externalUsageWritePath),

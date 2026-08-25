@@ -176,6 +176,19 @@ These constraints decide every conflict resolution. If an upstream change violat
   Upstream asserts the `/dev/tty` probe form inside its inline one-liners; the
   fork has none, so the test follows the probe into `scripts/claude-hud.sh`.
   Re-point it there on conflict rather than accepting upstream's version.
+- **Upstream agent-label tests need case adaptation, every sync.** The fork's
+  default `display.agentNamespaceMode: 'strip'` capitalizes the agent type, so
+  upstream assertions written against its own lowercase output (`/explore/`,
+  `/running-two/`, `'x'.repeat(21)`) fail on arrival. Match them
+  case-insensitively rather than changing the renderer — the invariants under
+  test (slot budget, retention, sanitizing, bounding) are case-independent.
+  Upstream tests using epoch timestamps for *completed* agents also need a recent
+  `endTime`, or the 60s retention window expires them before the assertion runs.
+- **Agent label order is sanitize → namespace-format → bound.** Namespace-
+  formatting first lets `formatNamespaced`'s `lastIndexOf(':')` split on a colon
+  inside an OSC 8 escape and surface the hyperlink URL as the "local" name;
+  bounding first eats the local name of a long `<ns>:<name>` pair. Upstream's
+  hostile-input test in `tests/render.test.js` catches the first failure mode.
 
 ### Fork features that must survive every sync
 
@@ -190,6 +203,7 @@ If `git diff` against the pre-rebase backup shows any of these as modified, the 
 | OMC `proxy_*` stripping | `src/render/tools-line.ts` etc. | OMC compat |
 | `display.agentNamespaceMode` | `src/config.ts`, `src/render/format-namespace.ts` | `strip` / `badge` / `raw`; badge abbreviates `oh-my-claudecode` → `omc` (`NAMESPACE_ABBR`) |
 | `display.projectStyle: 'natural'` | `src/render/lines/project.ts` (`renderNaturalProjectLine`) | Starship-style prose layout |
+| `display.sevenDayLayout` | `src/config.ts`, `src/render/lines/usage.ts` (`renderWeeklyUsageLine`, `weeklyOnSeparateLine`), `src/render/index.ts` (`pushWeeklyUsageLine`, 4 row-emit sites) | `inline`/`line`, default `inline`. `line` splits the weekly window onto its own line beneath the row carrying `usage`. **`renderUsageLine` must keep returning a single line in both layouts** — merge groups join elements into one row, so a multi-line return lands mid-row. Falls back to inline under `usageCompact` and when there is no 5-hour window. |
 | Hybrid background-agent tracking | `src/transcript.ts:442` (queue-op watcher), `src/transcript.ts:760` (tool_result handler) | See below |
 | Orchestration awareness (OMC + superpowers) | `src/orchestration.ts` (`OrchestrationState`), `src/omc-state.ts` (`readOmcState`), `src/superpowers-state.ts` (`readSuperpowersState`), `src/render/orchestration-line.ts`, `src/render/lines/project.ts` (inline badge), `src/types.ts` (`orchestration` on `RenderContext`; `latestSuperpowersSkill` on `TranscriptData`), `src/index.ts` (`resolveOrchestration`), `src/render/colors.ts` (`orchestration()`) + `src/config.ts` (`colors.orchestration`) | Unified, source-selectable. `display.orchestrationSource` (`auto`/`superpowers`/`omc`/`off`, default `auto`) → `auto` reads superpowers first then OMC; `display.showOrchestration` (default true) → inline `✦`(sp)/`⚙`(omc) `<mode> c/t`; `display.showOrchestrationDetail` (default false) → opt-in `✦`/`◆` detail; `display.orchestrationDetailLayout` (`line`/`inline`, default `line`) → `inline` folds `<mode>: <objective> c/t` into the badge and suppresses the separate line, falling back to the line under `compact` (which has no badge — `renderSessionLine` never calls `renderProjectLine`), with `showOrchestration` off, or with no objective; `display.orchestrationFreshnessMs` (default 900000) → superpowers phase liveness window. superpowers phase = latest `superpowers:<skill>` in the transcript; counts enriched by the plan-scoped SDD ledger (superpowers ≥6.2: `<repo-root>/.superpowers/sdd/<plan-basename>/progress.md`, newest wins; completions from `Task <N>: complete` lines, total from todos), else todos. The pre-6.2 flat `.superpowers/sdd/progress.md` must stay ignored — superpowers leaves stale ledgers in place as foreign, so reading one reports frozen progress forever. Legacy `showOmcMode`/`showOmcState` still migrate. Readers must never throw (run every tick). Both layouts colour identically: glyph + mode on `colors.orchestration` (default `cyan`), objective on `colors.label`, counts `dim`. |
 

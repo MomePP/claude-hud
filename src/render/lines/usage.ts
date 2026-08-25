@@ -177,7 +177,11 @@ export function renderUsageLine(
     wallClockOpts,
   });
 
-  if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
+  // Under `sevenDayLayout: 'line'` the weekly window is rendered by
+  // renderWeeklyUsageLine instead, so it is left off here. The usage line stays
+  // a single line either way — merge groups join elements into one row, so a
+  // multi-line return would land mid-row and break the join.
+  if (sevenDay !== null && sevenDay >= sevenDayThreshold && !weeklyOnSeparateLine(display)) {
     const sevenDayPart = formatUsageWindowPart({
       label: t("label.weekly"),
       labelKey: "label.weekly",
@@ -199,6 +203,81 @@ export function renderUsageLine(
   }
 
   return appendBalance(`${usageLabel} ${fiveHourPart}${scopedSuffix}`, balanceLabel);
+}
+
+/**
+ * True when the weekly window should be split onto its own line. Compact usage
+ * is deliberately excluded: its whole point is one terse row, and its `7d` part
+ * carries no label to anchor a separate line.
+ */
+function weeklyOnSeparateLine(display: RenderContext['config']['display']): boolean {
+  return (display?.sevenDayLayout ?? 'inline') === 'line'
+    && (display?.usageCompact ?? false) === false;
+}
+
+/**
+ * The weekly (7-day) window as a standalone line, for `sevenDayLayout: 'line'`.
+ *
+ * Returns null whenever the weekly window belongs on the usage line instead —
+ * inline layout, compact usage, below `sevenDayThreshold`, no seven-day data, or
+ * a session with no five-hour window at all (nothing to split away from).
+ */
+export function renderWeeklyUsageLine(
+  ctx: RenderContext,
+  labelOptions: ProgressLabelInput = {},
+): string | null {
+  const display = ctx.config?.display;
+  const colors = ctx.config?.colors;
+
+  if (display?.showUsage === false || !ctx.usageData || shouldHideUsage(ctx.stdin)) {
+    return null;
+  }
+
+  if (!weeklyOnSeparateLine(display) || isLimitReached(ctx.usageData)) {
+    return null;
+  }
+
+  const sevenDay = ctx.usageData.sevenDay;
+  const fiveHour = ctx.usageData.fiveHour;
+  if (sevenDay === null || fiveHour === null) {
+    return null;
+  }
+
+  if (sevenDay < (display?.sevenDayThreshold ?? 80)) {
+    return null;
+  }
+
+  // The usage line's own visibility gate. Without this the weekly line could
+  // outlive the row it belongs under.
+  const effectiveUsage = Math.max(
+    fiveHour,
+    sevenDay,
+    ...(ctx.usageData.scopedWindows ?? []).map((window) => window.percent ?? 0),
+  );
+  if (effectiveUsage < (display?.usageThreshold ?? 0)) {
+    return null;
+  }
+
+  return formatUsageWindowPart({
+    label: t("label.weekly"),
+    labelKey: "label.weekly",
+    percent: sevenDay,
+    resetAt: ctx.usageData.sevenDayResetAt,
+    windowMs: SEVEN_DAY_WINDOW_MS,
+    colors,
+    usageBarEnabled: display?.usageBarEnabled ?? true,
+    barWidth: getAdaptiveBarWidth(),
+    barStyle: display?.barStyle,
+    timeFormat: normalizeTimeFormat(display?.timeFormat),
+    showResetLabel: display?.showResetLabel ?? true,
+    forceLabel: true,
+    labelOptions,
+    usageValueMode: display?.usageValue ?? 'percent',
+    wallClockOpts: {
+      hourCycle: display?.hourCycle ?? 'auto',
+      showSeconds: display?.showClockSeconds ?? false,
+    },
+  });
 }
 
 function appendBalance(line: string, balanceLabel: string | null): string {
