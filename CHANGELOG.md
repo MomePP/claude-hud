@@ -4,6 +4,144 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-25 — MomePP fork (upstream sync onto ef5f1c8, 0.8.0 + transparent-terminal theming)
+
+Rebase-reconstruct of the fork onto the current upstream base, replacing the 0.7.0
+(`6f065f2`) root with upstream `ef5f1c8` — 13 upstream commits spanning releases 0.7.1,
+0.7.2 and 0.8.0. Carries the fork's transparent-terminal work from the same cycle.
+**Minor, not patch**: upstream adds two new user-facing options (`display.effortFormat`,
+per-config-directory overrides) and the fork adds three (`colors.dim`,
+`colors.barEmptyColor`, `gitStatus.linkBranch`). It is **not major** because every new
+option defaults to the current behavior — but see "Default-behavior changes visible on
+update" for the one thing that does move on its own.
+
+### Added — from upstream
+
+- **`display.effortFormat`** (`full` | `symbol` | `text`, default `full`) — how the effort
+  indicator renders when `display.showEffortLevel` is on: symbol and level text (`◑ high`),
+  symbol only (`◑`), or level text only (`high`). Ultracode keeps the full
+  `◕ ultracode(xhigh)` form under `symbol` so the marker is not lost, and levels without a
+  known symbol fall back to the level text. `src/render/model-display.ts` (#691).
+- **Per-config-directory overrides** — `$CLAUDE_CONFIG_DIR/claude-hud.json` layers on top of
+  the shared `plugins/claude-hud/config.json` at load time, using the same shape and only
+  needing the keys it changes. Matters when several config directories symlink `plugins/`
+  to one location. `src/config.ts` (#714).
+- **Config hardening** — config file size and nesting are bounded, symlinked and
+  prototype-sensitive config input is rejected, and terminal-bound config labels are
+  sanitized. `src/config.ts` (#714).
+- **Prompt-cache expiry rework** — the prompt-cache element now shows *the wall-clock time
+  the cache expires* (`Cache ⏱ at 14:30`) instead of a countdown, because the statusline
+  only repaints while Claude Code is active and a countdown freezes mid-drain. The TTL is
+  detected per request from `usage.cache_creation.ephemeral_5m_input_tokens` vs
+  `ephemeral_1h_input_tokens`, the clock is anchored to the *request* rather than the
+  response it produced, and subagent responses are ignored since a subagent runs against
+  its own cache. `display.promptCacheTtlSeconds` survives as a fallback for transcripts
+  that expose no tier. `src/render/lines/prompt-cache.ts`, `src/constants.ts` (#702).
+- **Stale completed-agent expiry** — completed agents drop off the agents line on the next
+  refresh after 60s, and completed history can no longer displace running agents from the
+  three visible slots. Agent labels are sanitized and length-bounded before terminal
+  output. `src/render/agents-line.ts` (#704).
+- **`formatAbsoluteTime`** — `formatAbsolute` renamed and exported so the prompt-cache line
+  can share the HUD's wall-clock formatting (`display.hourCycle`, `display.showClockSeconds`).
+  `src/render/format-reset-time.ts`.
+- **Dependencies** — dev-only `@types/node` 26.1.2 → 26.2.0 (#711).
+
+### Changed — fork
+
+- **`colors.dim`** — every `dim()` span is now overridable from one setting. `dim()` has
+  ~16 call sites (git connectives, separators, overflow markers, agent counts, added-dirs)
+  and most have no `colors` argument in scope, so each newly-noticed dim span used to mean
+  another targeted patch. The style is resolved once per run, mirroring `setLanguage()`,
+  which is set from the same config at the same two points. Defaults to SGR 2, so nothing
+  changes unless it is set. `src/render/colors.ts`, `src/index.ts`.
+- **`colors.barEmptyColor`** — the bar's unfilled track had `DIM` inlined in
+  `quotaBar`/`coloredBar`, and the existing `barEmpty` override only replaces the
+  character, not its colour. The `on` connective in the git segment likewise called the
+  bare `dim()` helper; it is a label like any other and now follows `colors.label`.
+  Both default to DIM. `src/render/colors.ts`.
+- **`gitStatus.linkBranch`** (boolean, default `true`) — drops the OSC 8 hyperlink from the
+  branch name. On a transparent terminal the branch rendered as a solid box while the
+  surrounding text did not; recolouring it changed nothing, which ruled out the colour and
+  left the link. Terminals mark link cells with a decoration, and drawing that decoration
+  needs a concrete cell background, so those cells get painted opaque.
+  `src/render/lines/project.ts`.
+
+  All three exist because terminals implement dim by blending the foreground against the
+  background, so on a transparent terminal a dim cell must have its background painted
+  opaque to blend against — which is exactly where the effect is most visible.
+
+### Conflict resolutions (kept fork features intact)
+
+- **`src/transcript.ts`** — upstream's prompt-cache clock was grafted into the fork's
+  `handleLine` closure rather than replaying the upstream diff: main-chain anchor,
+  `requestId` grouping, per-tier TTL detection, and the two `result.*` assignments.
+  `TRANSCRIPT_CACHE_VERSION` 16 → **17**, past both lineages' 16, so no cache written
+  without the new fields is read back. All three background-agent completion signals
+  (`<task-notification>`, `queue-operation`, `tool_result`) and `compact_boundary`
+  tracking verified intact.
+- **`src/render/agents-line.ts`** — upstream's retention window and `now` threading
+  combined with the fork's `display.agentNamespaceMode`. The label pipeline is
+  **sanitize → namespace-format → bound**: sanitizing first stops `formatNamespaced`
+  splitting on a colon inside an OSC 8 escape (which would surface the hyperlink URL as
+  the "local" name — caught by upstream's own hostile-input test), and bounding last stops
+  truncation eating the local name of a long `<ns>:<name>` pair.
+- **`tests/config.test.js`** — restored upstream's prompt-cache config coverage, which the
+  0.9.0 sync (`aaf3c19`) dropped while the config keys stayed live.
+- **`tests/render.test.js`** — upstream's agent-label assertions matched case-insensitively.
+  The fork's default `strip` namespace mode capitalizes the agent type, and the invariants
+  under test (slot budget, retention, sanitizing, bounding) are case-independent.
+- **`tests/transcript-omc.test.js`** — the OMC namespace test's completed agent now uses a
+  recent `endTime`; its epoch timestamps fell outside upstream's new retention window and
+  expired before the namespace was ever rendered.
+- **`tests/format-reset-time.test.js`** — the `h23` and `showSeconds` assertions anchored on
+  a bare `HH:MM(:SS)`, so any run between 22:00 and 23:59 local — where `now+2h` crosses
+  midnight and the formatter prepends the locale date — failed on `at Aug 26 01:03`. They
+  now allow an optional leading date group, matching the idiom the midnight-boundary tests
+  below them already use; the anchor still rejects a stray seconds component.
+- **`README.md` / `CHANGELOG.md` / `package.json` / `.claude-plugin/*`** — fork branding and
+  version kept; upstream's 0.8.0 prompt-cache semantics documented, `effortFormat` row and
+  per-directory override prose carried over. `README.zh.md` and `commands/configure.md`
+  took upstream's side wholesale (clean translation / configure updates, no fork content).
+
+### Skipped (per fork direction)
+
+- **`.github/workflows/` and `.github/dependabot.yml`** — the fork has no CI; upstream's
+  release workflow would fire on any tag whose target commit carries the YAML.
+- **Upstream's inline setup one-liner** — `commands/setup.md` and the launcher scripts
+  (`scripts/claude-hud.sh`, `scripts/claude-hud.ps1`) are fork-only and untouched.
+- **Default colour re-theme** — `model: green`, `project: cyan`, `gitBranch: brightMagenta`
+  stay pinned.
+- **Required `colors.barFilled` / `colors.barEmpty`** — they stay optional
+  (`string | undefined`, no default) or `display.barStyle` breaks.
+- **Consolidating `colors.thinking` / `colors.duration` / `colors.orchestration` into
+  `colors.label`** — they stay independent overrides.
+
+### Default-behavior changes visible on update
+
+- **Prompt-cache element** (only if `display.showPromptCache` is on, which is off by
+  default): now an expiry *time* rather than a countdown, and the TTL is detected from the
+  transcript instead of read from `display.promptCacheTtlSeconds`. A 1-hour session that
+  had been counting against the 300s default will now report the real hour.
+- **Agents line**: completed agents disappear after 60s instead of lingering, and running
+  agents always win the three visible slots.
+- Everything else defaults to the previous behavior — the three new fork colour/link
+  options are inert until set.
+
+### Tests
+
+1190 pass, 0 fail, 6 skipped (1196 total), up from 1144 pass pre-sync as upstream's suites
+came along. `tests/transcript-omc.test.js` still covers the fork's namespace modes, OMC
+proxy-tool stripping and background-agent completion; `tests/setup-command.test.js` still
+follows the `/dev/tty` probe into `scripts/claude-hud.sh` rather than upstream's inline
+one-liner. Committed `dist/` reproduces byte-identical from a fresh `npm run build`, and
+every fork-feature source file is byte-identical to `backup/pre-rebase-2026-08-25`.
+
+### Bumped
+
+- `package.json` → `0.11.0`
+- `.claude-plugin/plugin.json` → `0.11.0`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.11.0`
+
 ## [0.10.1] - 2026-08-14 — MomePP fork (themeable orchestration badge)
 
 Patch: the inline orchestration badge was built as one `dim()` string, so on a dark
