@@ -41,6 +41,16 @@ width and only costs a line in the weeks usage is actually high.
 
 ### Fixed — fork
 
+- **`projectStyle: 'natural'` never rendered the effort level.** `showEffortLevel`
+  (and the new upstream `effortFormat`) were silently inert for anyone on the
+  fork's natural project style: `renderNaturalProjectLine` composes its own model
+  segment and never reached `formatEffortSuffix`, which only the pipes bracket
+  called. Natural style is fork-only, so upstream never had this to lose. The
+  suffix helper is now exported and shared, so both styles render identical
+  effort text — including the ultracode carve-out, where the marker lives in the
+  level text and so survives `effortFormat: 'symbol'`. Effort sits between the
+  model and the provider label, matching the pipes bracket's order.
+  `src/render/model-display.ts`, `src/render/lines/project.ts`.
 - **Model-scoped usage bars ignored `display.barStyle` in expanded layout.** The
   0.9.1 fix (`4fd4584`) threaded `barStyle` into `renderSessionLine` — the compact
   layout — and stopped there. `renderUsageLine`, which drives the expanded layout,
@@ -66,12 +76,15 @@ output. Opting in is a one-key change.
 
 ### Tests
 
-1202 pass, 0 fail, 6 skipped (1208 total), up from 1190. New
+1211 pass, 0 fail, 6 skipped (1217 total), up from 1190. New
 `tests/seven-day-layout.test.js` covers config validation and defaulting, the
 inline/line split, the threshold gate on both sides, single-line invariants for
 both renderers (the merge-group constraint), and all three fallbacks.
 `tests/scoped-usage.test.js` gains the expanded-layout twin of its 0.9.1
-`barStyle` regression test — it fails against the pre-fix renderer.
+`barStyle` regression test — it fails against the pre-fix renderer. New
+`tests/natural-effort.test.js` pins natural and pipes to the same effort text
+across all three `effortFormat` modes, the ultracode carve-out, and the
+no-effort / no-model gates.
 
 ### Bumped
 

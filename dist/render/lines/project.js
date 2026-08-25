@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { formatModelName, getProviderLabel, resolveModelName } from '../../stdin.js';
-import { formatModelDisplay } from '../model-display.js';
+import { formatModelDisplay, formatEffortSuffix } from '../model-display.js';
 import { getOutputSpeed } from '../../speed-tracker.js';
 import { git as gitColor, gitBranch as gitBranchColor, warning as warningColor, critical as criticalColor, label, model as modelColor, project as projectColor, red, green, yellow, dim, custom as customColor, thinking as thinkingColor, duration as durationColor, orchestration as orchestrationColor } from '../colors.js';
 import { t } from '../../i18n/index.js';
@@ -249,8 +249,12 @@ function renderNaturalProjectLine(ctx) {
     const coreSegments = [];
     if (display?.showModel !== false) {
         const model = formatModelName(resolveModelName(ctx.stdin, ctx.transcript, display?.modelSource), display?.modelFormat, display?.modelOverride);
+        // Effort sits between the model and the provider, matching the pipes
+        // bracket (`${model}${effortSuffix} | ${provider}`) rather than trailing
+        // the whole segment.
+        const modelWithEffort = `${model}${formatEffortSuffix(ctx, display?.effortFormat ?? 'full')}`;
         const providerLabel = getProviderLabel(ctx.stdin);
-        const modelText = providerLabel ? `${model} (${providerLabel})` : model;
+        const modelText = providerLabel ? `${modelWithEffort} (${providerLabel})` : modelWithEffort;
         const glyph = display?.modelGlyph ?? '';
         const modelPart = glyph ? `${glyph} ${modelText}` : modelText;
         coreSegments.push(modelColor(modelPart, colors));
