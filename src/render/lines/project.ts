@@ -170,6 +170,38 @@ function safeHyperlink(uri: string | undefined | null, text: string): string {
   }
 }
 
+/**
+ * The inline `+dir +dir` added-directory segment, shared by both project styles.
+ *
+ * Returns null when `/add-dir` was never used, `showAddedDirs` is off, or
+ * `addedDirsLayout` is 'line' — in which case the addedDirs element renders them
+ * as their own line and showing them here too would duplicate them.
+ */
+function buildInlineAddedDirs(ctx: RenderContext): string | null {
+  const display = ctx.config?.display;
+  const addedDirs = normalizeAddedDirs(ctx.stdin.workspace?.added_dirs);
+
+  if (
+    display?.showAddedDirs === false
+    || (display?.addedDirsLayout ?? 'inline') !== 'inline'
+    || addedDirs.length === 0
+  ) {
+    return null;
+  }
+
+  const visible = addedDirs.slice(0, MAX_RENDERED_ADDED_DIRS);
+  const overflow = addedDirs.length - visible.length;
+  const rendered = visible.map((dir) => {
+    const name = truncateBasename(sanitizeDisplayText(basenameOf(dir)));
+    return safeHyperlink(getFileHref(dir), dim(`+${name}`));
+  });
+  if (overflow > 0) {
+    rendered.push(dim(`+${overflow} more`));
+  }
+
+  return rendered.join(' ');
+}
+
 function renderPipesProjectLine(ctx: RenderContext): string | null {
   const display = ctx.config?.display;
   const colors = ctx.config?.colors;
@@ -205,22 +237,7 @@ function renderPipesProjectLine(ctx: RenderContext): string | null {
     }
   }
 
-  let addedDirsPart: string | null = null;
-  const addedDirs = normalizeAddedDirs(ctx.stdin.workspace?.added_dirs);
-  const addedDirsLayout = display?.addedDirsLayout ?? 'inline';
-  if (display?.showAddedDirs !== false && addedDirsLayout === 'inline' && addedDirs.length > 0) {
-    const visible = addedDirs.slice(0, MAX_RENDERED_ADDED_DIRS);
-    const overflow = addedDirs.length - visible.length;
-    const rendered = visible.map((dir) => {
-      const name = truncateBasename(sanitizeDisplayText(basenameOf(dir)));
-      const text = dim(`+${name}`);
-      return safeHyperlink(getFileHref(dir), text);
-    });
-    if (overflow > 0) {
-      rendered.push(dim(`+${overflow} more`));
-    }
-    addedDirsPart = rendered.join(' ');
-  }
+  const addedDirsPart = buildInlineAddedDirs(ctx);
 
   let gitPart = '';
   const vcs = getVcsDisplayState(ctx.gitStatus, ctx.config);
@@ -305,6 +322,13 @@ function renderNaturalProjectLine(ctx: RenderContext): string | null {
       const projectGlyphPart = projectGlyph ? `${projectColor(projectGlyph, colors)} ` : '';
       coreSegments.push(`${dim('in')} ${projectGlyphPart}${linked}`);
     }
+  }
+
+  // Between project and branch, matching the pipes order
+  // (`model │ +dirs git:(branch)`).
+  const naturalAddedDirs = buildInlineAddedDirs(ctx);
+  if (naturalAddedDirs) {
+    coreSegments.push(naturalAddedDirs);
   }
 
   const vcs = getVcsDisplayState(ctx.gitStatus, ctx.config);

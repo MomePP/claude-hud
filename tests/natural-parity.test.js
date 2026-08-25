@@ -103,3 +103,56 @@ test('effort sits between the model and the provider, as in pipes', () => {
     assert.match(line, /◑ high \(/, `effort should precede the provider paren, got: ${line}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// added dirs — the second parity gap of the same class as effort
+// ---------------------------------------------------------------------------
+
+function withAddedDirs(ctx, dirs = ['/tmp/extra-one', '/tmp/extra-two']) {
+  ctx.stdin.workspace = { added_dirs: dirs };
+  return ctx;
+}
+
+test('natural renders inline added dirs', () => {
+  const line = stripAnsi(renderProjectLine(withAddedDirs(
+    ctxWith({ ...natural, showAddedDirs: true, addedDirsLayout: 'inline' }),
+  )));
+  assert.match(line, /\+extra-one/, `expected inline added dirs in natural style, got: ${line}`);
+  assert.match(line, /\+extra-two/);
+});
+
+test('natural and pipes agree on inline added dirs', () => {
+  const display = { showAddedDirs: true, addedDirsLayout: 'inline' };
+  const naturalLine = stripAnsi(renderProjectLine(withAddedDirs(ctxWith({ ...natural, ...display }))));
+  const pipesLine = stripAnsi(renderProjectLine(withAddedDirs(ctxWith({ projectStyle: 'pipes', ...display }))));
+  for (const line of [naturalLine, pipesLine]) {
+    assert.match(line, /\+extra-one/);
+    assert.match(line, /\+extra-two/);
+  }
+});
+
+test('natural keeps added dirs off the project line under addedDirsLayout: line', () => {
+  // The addedDirs element renders them as their own line instead; showing both
+  // would duplicate them.
+  const line = stripAnsi(renderProjectLine(withAddedDirs(
+    ctxWith({ ...natural, showAddedDirs: true, addedDirsLayout: 'line' }),
+  )));
+  assert.doesNotMatch(line, /\+extra-one/, `expected no inline added dirs, got: ${line}`);
+});
+
+test('natural honors showAddedDirs: false', () => {
+  const line = stripAnsi(renderProjectLine(withAddedDirs(
+    ctxWith({ ...natural, showAddedDirs: false, addedDirsLayout: 'inline' }),
+  )));
+  assert.doesNotMatch(line, /\+extra-one/, `expected added dirs suppressed, got: ${line}`);
+});
+
+test('natural places added dirs between the project and the branch, as in pipes', () => {
+  const ctx = withAddedDirs(ctxWith({ ...natural, showAddedDirs: true, addedDirsLayout: 'inline' }));
+  ctx.gitStatus = { isRepo: true, branch: 'main', dirty: false, ahead: 0, behind: 0 };
+  const line = stripAnsi(renderProjectLine(ctx));
+  const dirsAt = line.indexOf('+extra-one');
+  const branchAt = line.indexOf('main');
+  assert.ok(dirsAt > -1 && branchAt > -1, `expected both segments, got: ${line}`);
+  assert.ok(dirsAt < branchAt, `added dirs should precede the branch, got: ${line}`);
+});

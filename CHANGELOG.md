@@ -51,6 +51,13 @@ width and only costs a line in the weeks usage is actually high.
   level text and so survives `effortFormat: 'symbol'`. Effort sits between the
   model and the provider label, matching the pipes bracket's order.
   `src/render/model-display.ts`, `src/render/lines/project.ts`.
+- **`projectStyle: 'natural'` ignored `addedDirsLayout: 'inline'`.** The same
+  parity gap as the effort level, found by auditing the two project renderers
+  against each other: the inline `+dir +dir` segment was built inside
+  `renderPipesProjectLine` and so existed only there, leaving the option a silent
+  no-op under natural style. The block is now the shared `buildInlineAddedDirs`
+  helper, called by both, and natural places it between the project and the
+  branch to match the pipes order. `src/render/lines/project.ts`.
 - **Model-scoped usage bars ignored `display.barStyle` in expanded layout.** The
   0.9.1 fix (`4fd4584`) threaded `barStyle` into `renderSessionLine` — the compact
   layout — and stopped there. `renderUsageLine`, which drives the expanded layout,
@@ -76,15 +83,23 @@ output. Opting in is a one-key change.
 
 ### Tests
 
-1211 pass, 0 fail, 6 skipped (1217 total), up from 1190. New
+1216 pass, 0 fail, 6 skipped (1222 total), up from 1190. New
 `tests/seven-day-layout.test.js` covers config validation and defaulting, the
 inline/line split, the threshold gate on both sides, single-line invariants for
 both renderers (the merge-group constraint), and all three fallbacks.
 `tests/scoped-usage.test.js` gains the expanded-layout twin of its 0.9.1
 `barStyle` regression test — it fails against the pre-fix renderer. New
-`tests/natural-effort.test.js` pins natural and pipes to the same effort text
-across all three `effortFormat` modes, the ultracode carve-out, and the
-no-effort / no-model gates.
+`tests/natural-parity.test.js` pins natural and pipes to the same output: effort
+text across all three `effortFormat` modes plus the ultracode carve-out, inline
+added dirs and their placement before the branch, and the no-effort / no-model /
+`showAddedDirs: false` / `addedDirsLayout: 'line'` gates.
+
+An audit of the remaining surface found no third gap of this class: every other
+project-line feature (orchestration badge, thinking, pending permission,
+last-request tokens, duration, session name, version, speed) is composed in the
+shared `buildExtras`, which both styles call; all 18 bar-drawing call sites now
+pass `barStyle`; and all 80 `display.*` options are read by some renderer — no
+dead config.
 
 ### Bumped
 
