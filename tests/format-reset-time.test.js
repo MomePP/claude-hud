@@ -137,13 +137,18 @@ test('opts: h23 avoids AM/PM and uses 00-23 hours', () => {
   const resetAt = future(2 * HOUR);
   const result = formatResetTime(resetAt, 'absolute', { hourCycle: 'h23', showSeconds: false });
   assert.doesNotMatch(result, /AM|PM/i);
-  assert.match(result, /^at \d{2}:\d{2}$/);
+  // The optional leading group absorbs the locale date the formatter prepends
+  // when the reset lands on the next calendar day — a run between 22:00 and
+  // 23:59 local puts now+2h past midnight. The anchor still rejects a stray
+  // seconds component.
+  assert.match(result, /^at (?:.+ )?\d{2}:\d{2}$/);
 });
 
 test('opts: showSeconds adds a seconds component', () => {
   const resetAt = future(2 * HOUR);
   const result = formatResetTime(resetAt, 'absolute', { hourCycle: 'h23', showSeconds: true });
-  assert.match(result, /^at \d{2}:\d{2}:\d{2}$/);
+  // Optional leading group: same next-calendar-day date prefix as above.
+  assert.match(result, /^at (?:.+ )?\d{2}:\d{2}:\d{2}$/);
 });
 
 test('opts: midnight boundary — h23 shows 00, not 24', () => {
