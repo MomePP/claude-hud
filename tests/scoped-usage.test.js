@@ -237,3 +237,19 @@ test('renderSessionLine applies display.barStyle to model-scoped usage bars', ()
   assert.doesNotMatch(line, /[█░]/, `block glyphs leaked into a thin-style line: ${line}`);
   assert.match(line, /Fable/);
 });
+
+// Same defect, other renderer. The 0.9.1 fix patched renderSessionLine (compact
+// layout) only; renderUsageLine drives the expanded layout and was left passing
+// no barStyle, so a scoped bar rendered in block glyphs next to thin 5h/weekly
+// bars on the very same line.
+test('renderUsageLine applies display.barStyle to model-scoped usage bars', () => {
+  const ctx = renderContext(
+    scopedUsage({ fiveHour: 25, sevenDay: 90 }),
+    { usageBarEnabled: true, barStyle: 'thin', sevenDayThreshold: 0 },
+  );
+
+  const line = stripAnsi(renderUsageLine(ctx));
+
+  assert.doesNotMatch(line, /[█░]/, `block glyphs leaked into a thin-style line: ${line}`);
+  assert.match(line, /Fable/);
+});

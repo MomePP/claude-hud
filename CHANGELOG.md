@@ -39,6 +39,18 @@ width and only costs a line in the weeks usage is actually high.
   wherever `elementOrder` and `mergeGroups` put it, rather than being appended at
   the end of the HUD.
 
+### Fixed — fork
+
+- **Model-scoped usage bars ignored `display.barStyle` in expanded layout.** The
+  0.9.1 fix (`4fd4584`) threaded `barStyle` into `renderSessionLine` — the compact
+  layout — and stopped there. `renderUsageLine`, which drives the expanded layout,
+  was still the one `formatUsageWindowPart` call site not receiving it, so a
+  model-scoped window rendered in default `█░` block glyphs directly beside `━─`
+  thin 5h and weekly bars on the same line. Not a regression from the 0.11.0 sync;
+  it has been latent since 0.9.1 and only shows for users on a non-default
+  `barStyle` whose Claude Code sends `rate_limits.model_scoped`.
+  `src/render/lines/usage.ts`.
+
 ### Fallbacks (deliberate)
 
 - **`display.usageCompact`** — stays inline. Compact usage exists to be one terse
@@ -58,6 +70,8 @@ output. Opting in is a one-key change.
 `tests/seven-day-layout.test.js` covers config validation and defaulting, the
 inline/line split, the threshold gate on both sides, single-line invariants for
 both renderers (the merge-group constraint), and all three fallbacks.
+`tests/scoped-usage.test.js` gains the expanded-layout twin of its 0.9.1
+`barStyle` regression test — it fails against the pre-fix renderer.
 
 ### Bumped
 

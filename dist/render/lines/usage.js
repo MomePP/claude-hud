@@ -50,6 +50,7 @@ export function renderUsageLine(ctx, labelOptions = {}) {
                 colors,
                 usageBarEnabled: display?.usageBarEnabled ?? true,
                 barWidth: barWidthForScoped,
+                barStyle: display?.barStyle,
                 timeFormat,
                 showResetLabel,
                 forceLabel: true,
