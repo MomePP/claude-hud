@@ -58,6 +58,8 @@ export const DEFAULT_CONFIG = {
         showDirty: true,
         showAheadBehind: false,
         showFileStats: false,
+        showFileList: false,
+        linkBranch: true,
         branchOverflow: 'truncate',
         pushWarningThreshold: 0,
         pushCriticalThreshold: 0,
@@ -104,6 +106,9 @@ export const DEFAULT_CONFIG = {
         promptCacheTtlSeconds: 300,
         showSessionTokens: false,
         showOutputStyle: false,
+        showThinkingIndicator: true,
+        showPendingPermission: true,
+        showLastRequestTokens: false,
         showSessionStartDate: false,
         showLastResponseAt: false,
         showCompactions: false,
@@ -126,6 +131,19 @@ export const DEFAULT_CONFIG = {
         customLine: '',
         customLinePosition: 'last',
         timeFormat: 'relative',
+        projectStyle: 'pipes',
+        naturalSeparator: ' \u00B7 ',
+        modelGlyph: '\uec10',
+        projectGlyph: '\uf114',
+        branchGlyph: '\ue725',
+        durationGlyph: '\uf017',
+        barStyle: 'block',
+        agentNamespaceMode: 'strip',
+        orchestrationSource: 'auto',
+        showOrchestration: true,
+        showOrchestrationDetail: false,
+        orchestrationDetailLayout: 'line',
+        orchestrationFreshnessMs: 900000,
         hourCycle: 'auto',
         showClockSeconds: false,
         showAdvisor: false,
@@ -138,14 +156,16 @@ export const DEFAULT_CONFIG = {
         warning: 'yellow',
         usageWarning: 'brightMagenta',
         critical: 'red',
-        model: 'cyan',
-        project: 'yellow',
+        model: 'green',
+        project: 'cyan',
         git: 'magenta',
-        gitBranch: 'cyan',
+        gitBranch: 'brightMagenta',
         label: 'dim',
+        dim: 'dim',
         custom: 208,
-        barFilled: '█',
-        barEmpty: '░',
+        thinking: 'dim',
+        duration: 'dim',
+        orchestration: 'cyan',
     },
 };
 export function getConfigPath() {
@@ -202,6 +222,21 @@ function validateTimeFormat(value) {
 function validateCustomLinePosition(value) {
     return value === 'first' || value === 'last';
 }
+function validateProjectStyle(value) {
+    return value === 'pipes' || value === 'natural';
+}
+function validateAgentNamespaceMode(value) {
+    return value === 'strip' || value === 'badge' || value === 'raw';
+}
+function validateBarStyle(value) {
+    return value === 'block'
+        || value === 'square'
+        || value === 'thin'
+        || value === 'vertical'
+        || value === 'dots'
+        || value === 'shade'
+        || value === 'double';
+}
 function validateHourCycle(value) {
     return value === 'auto' || value === 'h11' || value === 'h12' || value === 'h23' || value === 'h24';
 }
@@ -216,12 +251,30 @@ function validateColorName(value) {
         || value === 'brightMagenta';
 }
 const UNSAFE_CODEPOINT = /[\p{Cc}\p{Cf}\p{Variation_Selector}\p{Zl}\p{Zp}\p{Cn}]/u;
+// Lazy singleton — see src/render/index.ts. validateBarChar is called from
+// loadConfig on every tick; eagerly constructing Intl.Segmenter at module
+// load would waste the first-construction ICU init (~6ms) when no override is set.
+let _barCharSegmenter;
+function getBarCharSegmenter() {
+    if (_barCharSegmenter !== undefined) {
+        return _barCharSegmenter;
+    }
+    _barCharSegmenter = typeof Intl.Segmenter === 'function'
+        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+        : null;
+    return _barCharSegmenter;
+}
 function validateBarChar(value) {
     if (typeof value !== 'string' || value.length === 0)
         return false;
-    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    if (Array.from(segmenter.segment(value)).length !== 1)
+    const segmenter = getBarCharSegmenter();
+    if (segmenter) {
+        if (Array.from(segmenter.segment(value)).length !== 1)
+            return false;
+    }
+    else if (Array.from(value).length !== 1) {
         return false;
+    }
     for (const ch of value) {
         if (UNSAFE_CODEPOINT.test(ch))
             return false;
@@ -302,40 +355,36 @@ function validateMergeGroups(value) {
     if (!Array.isArray(value)) {
         return DEFAULT_MERGE_GROUPS.map(group => [...group]);
     }
-    if (value.length === 0) {
-        return [];
-    }
-    const usedElements = new Set();
-    const mergeGroups = [];
-    for (const group of value) {
-        if (!Array.isArray(group)) {
+    const groups = [];
+    for (const rawGroup of value) {
+        if (!Array.isArray(rawGroup))
             continue;
-        }
-        const seenInGroup = new Set();
-        const normalizedGroup = [];
-        const pendingElements = [];
-        for (const item of group) {
-            if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item)) {
+        const seen = new Set();
+        const group = [];
+        for (const item of rawGroup) {
+            if (typeof item !== 'string' || !KNOWN_ELEMENTS.has(item))
                 continue;
-            }
-            const element = item;
-            if (seenInGroup.has(element) || usedElements.has(element)) {
+            const el = item;
+            if (seen.has(el))
                 continue;
-            }
-            seenInGroup.add(element);
-            normalizedGroup.push(element);
-            pendingElements.push(element);
+            seen.add(el);
+            group.push(el);
         }
-        if (normalizedGroup.length >= 2) {
-            for (const element of pendingElements) {
-                usedElements.add(element);
-            }
-            mergeGroups.push(normalizedGroup);
-        }
+        if (group.length >= 2)
+            groups.push(group);
     }
-    return mergeGroups.length > 0
-        ? mergeGroups
-        : DEFAULT_MERGE_GROUPS.map(group => [...group]);
+    return groups;
+}
+function validateMaxWidth(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+        return null;
+    return Math.min(Math.floor(value), MAX_TERMINAL_WIDTH);
+}
+function validatePromptCacheTtl(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        return DEFAULT_CONFIG.display.promptCacheTtlSeconds;
+    }
+    return Math.floor(value);
 }
 function migrateConfig(userConfig) {
     const migrated = { ...userConfig };
@@ -399,6 +448,17 @@ function validateAutoCompactWindow(value) {
     }
     return value;
 }
+function validateOrchestrationSource(value) {
+    return value === 'auto' || value === 'superpowers' || value === 'omc' || value === 'off'
+        ? value
+        : null;
+}
+function validateOrchestrationFreshnessMs(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+        return DEFAULT_CONFIG.display.orchestrationFreshnessMs;
+    }
+    return value;
+}
 function validateOptionalPath(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -427,10 +487,7 @@ export function mergeConfig(userConfig) {
     const pathLevels = validatePathLevels(migrated.pathLevels)
         ? migrated.pathLevels
         : DEFAULT_CONFIG.pathLevels;
-    const rawMaxWidth = migrated.maxWidth;
-    const maxWidth = (typeof rawMaxWidth === 'number' && Number.isFinite(rawMaxWidth) && rawMaxWidth > 0)
-        ? Math.min(Math.floor(rawMaxWidth), MAX_TERMINAL_WIDTH)
-        : null;
+    const maxWidth = validateMaxWidth(migrated.maxWidth);
     const elementOrder = validateElementOrder(migrated.elementOrder);
     const projectLineOrder = validateProjectLineOrder(migrated.projectLineOrder);
     const forceMaxWidth = typeof migrated.forceMaxWidth === 'boolean'
@@ -449,12 +506,21 @@ export function mergeConfig(userConfig) {
         showFileStats: typeof migrated.gitStatus?.showFileStats === 'boolean'
             ? migrated.gitStatus.showFileStats
             : DEFAULT_CONFIG.gitStatus.showFileStats,
+        showFileList: typeof migrated.gitStatus?.showFileList === 'boolean'
+            ? migrated.gitStatus.showFileList
+            : DEFAULT_CONFIG.gitStatus.showFileList,
+        linkBranch: typeof migrated.gitStatus?.linkBranch === 'boolean'
+            ? migrated.gitStatus.linkBranch
+            : DEFAULT_CONFIG.gitStatus.linkBranch,
         branchOverflow: validateGitBranchOverflow(migrated.gitStatus?.branchOverflow)
             ? migrated.gitStatus.branchOverflow
             : DEFAULT_CONFIG.gitStatus.branchOverflow,
         pushWarningThreshold: validateCountThreshold(migrated.gitStatus?.pushWarningThreshold),
         pushCriticalThreshold: validateCountThreshold(migrated.gitStatus?.pushCriticalThreshold),
     };
+    // Loosely-typed view of the user's display block for reading deprecated keys
+    // (showOmcMode/showOmcState) that no longer exist on the HudConfig type.
+    const legacyDisplay = migrated.display;
     const jjStatus = {
         enabled: typeof migrated.jjStatus?.enabled === 'boolean'
             ? migrated.jjStatus.enabled
@@ -560,13 +626,22 @@ export function mergeConfig(userConfig) {
         showPromptCache: typeof migrated.display?.showPromptCache === 'boolean'
             ? migrated.display.showPromptCache
             : DEFAULT_CONFIG.display.showPromptCache,
-        promptCacheTtlSeconds: validateDurationSeconds(migrated.display?.promptCacheTtlSeconds, DEFAULT_CONFIG.display.promptCacheTtlSeconds),
+        promptCacheTtlSeconds: validatePromptCacheTtl(migrated.display?.promptCacheTtlSeconds),
         showSessionTokens: typeof migrated.display?.showSessionTokens === 'boolean'
             ? migrated.display.showSessionTokens
             : DEFAULT_CONFIG.display.showSessionTokens,
         showOutputStyle: typeof migrated.display?.showOutputStyle === 'boolean'
             ? migrated.display.showOutputStyle
             : DEFAULT_CONFIG.display.showOutputStyle,
+        showThinkingIndicator: typeof migrated.display?.showThinkingIndicator === 'boolean'
+            ? migrated.display.showThinkingIndicator
+            : DEFAULT_CONFIG.display.showThinkingIndicator,
+        showPendingPermission: typeof migrated.display?.showPendingPermission === 'boolean'
+            ? migrated.display.showPendingPermission
+            : DEFAULT_CONFIG.display.showPendingPermission,
+        showLastRequestTokens: typeof migrated.display?.showLastRequestTokens === 'boolean'
+            ? migrated.display.showLastRequestTokens
+            : DEFAULT_CONFIG.display.showLastRequestTokens,
         showSessionStartDate: typeof migrated.display?.showSessionStartDate === 'boolean'
             ? migrated.display.showSessionStartDate
             : DEFAULT_CONFIG.display.showSessionStartDate,
@@ -607,6 +682,47 @@ export function mergeConfig(userConfig) {
         timeFormat: validateTimeFormat(migrated.display?.timeFormat)
             ? migrated.display.timeFormat
             : DEFAULT_CONFIG.display.timeFormat,
+        projectStyle: validateProjectStyle(migrated.display?.projectStyle)
+            ? migrated.display.projectStyle
+            : DEFAULT_CONFIG.display.projectStyle,
+        naturalSeparator: typeof migrated.display?.naturalSeparator === 'string'
+            ? migrated.display.naturalSeparator.slice(0, 8)
+            : DEFAULT_CONFIG.display.naturalSeparator,
+        modelGlyph: typeof migrated.display?.modelGlyph === 'string'
+            ? migrated.display.modelGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.modelGlyph,
+        projectGlyph: typeof migrated.display?.projectGlyph === 'string'
+            ? migrated.display.projectGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.projectGlyph,
+        branchGlyph: typeof migrated.display?.branchGlyph === 'string'
+            ? migrated.display.branchGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.branchGlyph,
+        durationGlyph: typeof migrated.display?.durationGlyph === 'string'
+            ? migrated.display.durationGlyph.slice(0, 8)
+            : DEFAULT_CONFIG.display.durationGlyph,
+        barStyle: validateBarStyle(migrated.display?.barStyle)
+            ? migrated.display.barStyle
+            : DEFAULT_CONFIG.display.barStyle,
+        agentNamespaceMode: validateAgentNamespaceMode(migrated.display?.agentNamespaceMode)
+            ? migrated.display.agentNamespaceMode
+            : DEFAULT_CONFIG.display.agentNamespaceMode,
+        orchestrationSource: validateOrchestrationSource(migrated.display?.orchestrationSource)
+            ?? DEFAULT_CONFIG.display.orchestrationSource,
+        showOrchestration: typeof migrated.display?.showOrchestration === 'boolean'
+            ? migrated.display.showOrchestration
+            : (typeof legacyDisplay?.showOmcMode === 'boolean'
+                ? legacyDisplay.showOmcMode
+                : DEFAULT_CONFIG.display.showOrchestration),
+        showOrchestrationDetail: typeof migrated.display?.showOrchestrationDetail === 'boolean'
+            ? migrated.display.showOrchestrationDetail
+            : (typeof legacyDisplay?.showOmcState === 'boolean'
+                ? legacyDisplay.showOmcState
+                : DEFAULT_CONFIG.display.showOrchestrationDetail),
+        orchestrationDetailLayout: (migrated.display?.orchestrationDetailLayout === 'inline'
+            || migrated.display?.orchestrationDetailLayout === 'line')
+            ? migrated.display.orchestrationDetailLayout
+            : DEFAULT_CONFIG.display.orchestrationDetailLayout,
+        orchestrationFreshnessMs: validateOrchestrationFreshnessMs(migrated.display?.orchestrationFreshnessMs),
         hourCycle: validateHourCycle(migrated.display?.hourCycle)
             ? migrated.display.hourCycle
             : DEFAULT_CONFIG.display.hourCycle,
@@ -650,15 +766,30 @@ export function mergeConfig(userConfig) {
         label: validateColorValue(migrated.colors?.label)
             ? migrated.colors.label
             : DEFAULT_CONFIG.colors.label,
+        dim: validateColorValue(migrated.colors?.dim)
+            ? migrated.colors.dim
+            : DEFAULT_CONFIG.colors.dim,
         custom: validateColorValue(migrated.colors?.custom)
             ? migrated.colors.custom
             : DEFAULT_CONFIG.colors.custom,
+        thinking: validateColorValue(migrated.colors?.thinking)
+            ? migrated.colors.thinking
+            : DEFAULT_CONFIG.colors.thinking,
+        duration: validateColorValue(migrated.colors?.duration)
+            ? migrated.colors.duration
+            : DEFAULT_CONFIG.colors.duration,
+        orchestration: validateColorValue(migrated.colors?.orchestration)
+            ? migrated.colors.orchestration
+            : DEFAULT_CONFIG.colors.orchestration,
         barFilled: validateBarChar(migrated.colors?.barFilled)
             ? migrated.colors.barFilled
-            : DEFAULT_CONFIG.colors.barFilled,
+            : undefined,
         barEmpty: validateBarChar(migrated.colors?.barEmpty)
             ? migrated.colors.barEmpty
-            : DEFAULT_CONFIG.colors.barEmpty,
+            : undefined,
+        barEmptyColor: validateColorValue(migrated.colors?.barEmptyColor)
+            ? migrated.colors.barEmptyColor
+            : undefined,
     };
     return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, projectLineOrder, gitStatus, jjStatus, display, colors };
 }

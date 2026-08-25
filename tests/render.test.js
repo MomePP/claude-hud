@@ -112,6 +112,19 @@ function captureRenderLines(ctx) {
   return logs;
 }
 
+// Same as captureRenderLines but keeps the ANSI escapes, for color assertions.
+function captureRenderLinesRaw(ctx) {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = line => logs.push(line);
+  try {
+    render(ctx);
+  } finally {
+    console.log = originalLog;
+  }
+  return logs;
+}
+
 function withColumns(stream, columns, fn) {
   const originalColumns = stream.columns;
   Object.defineProperty(stream, 'columns', { value: columns, configurable: true });
@@ -363,11 +376,29 @@ test('renderSessionLine displays project name from POSIX cwd', () => {
   assert.ok(!line.includes('/Users/jarrod'));
 });
 
+// Host-independent: the cwd split uses /[/\\]/, so Windows-style paths render
+// correctly on any platform. No win32 gate needed (previously skipped off-Windows).
 test('renderSessionLine displays project name from Windows cwd on every host', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = 'C:\\Users\\jarrod\\my-project';
   const line = renderSessionLine(ctx);
   assert.ok(line.includes('my-project'));
+  assert.ok(!line.includes('C:\\'));
+});
+
+test('renderSessionLine handles a deep Windows cwd (drive prefix dropped)', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'D:\\dev\\work\\acme-app';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('acme-app'));
+  assert.ok(!line.includes('D:\\'));
+});
+
+test('renderSessionLine handles a mixed-separator Windows cwd', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = 'C:\\Users\\dev/project-x';
+  const line = renderSessionLine(ctx);
+  assert.ok(line.includes('project-x'));
   assert.ok(!line.includes('C:\\'));
 });
 
@@ -868,6 +899,35 @@ test('renderProjectLine places customLine at end when position is last', () => {
   assert.ok(customIdx > modelIdx, 'custom line should appear after model badge when position is last');
 });
 
+test('renderProjectLine (natural style) renders customLine at end by default', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.projectStyle = 'natural';
+  ctx.config.display.customLine = 'prod-server';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const projectIdx = line.indexOf('my-project');
+  assert.ok(customIdx >= 0, 'natural style should include the custom line');
+  assert.ok(customIdx > projectIdx, 'default position should place custom line after the project');
+});
+
+test('renderProjectLine (natural style) places customLine first when position is first', () => {
+  // Regression: gating buildExtras to position 'last' must not drop customLine in
+  // natural style, which has no upstream 'first' handling of its own.
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.projectStyle = 'natural';
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'first';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const projectIdx = line.indexOf('my-project');
+  assert.ok(customIdx >= 0, 'natural style must still render customLine when position is first');
+  assert.ok(customIdx < projectIdx, 'custom line should appear before the project in first position');
+  // And it must appear exactly once (no duplication between front-push and extras).
+  assert.equal((line.match(/prod-server/g) ?? []).length, 1);
+});
+
 test('renderProjectLine applies modelFormat compact (strips context suffix)', () => {
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Opus 4.6 (1M context)' };
@@ -949,6 +1009,181 @@ test('renderProjectLine keeps the legacy trailing provider label when showProvid
   } finally {
     delete process.env.CLAUDE_CODE_USE_BEDROCK;
   }
+});
+
+test('renderProjectLine shows ✦ superpowers badge with progress', () => {
+  const ctx = baseContext();
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'executing-plans', active: true, objective: '',
+    taskCounts: { total: 7, completed: 3, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(line.includes('✦ executing-plans 3/7'), `got: ${line}`);
+});
+
+test('renderProjectLine shows ⚙ omc badge', () => {
+  const ctx = baseContext();
+  ctx.orchestration = {
+    source: 'omc', mode: 'pdca', active: true, objective: '',
+    taskCounts: { total: 0, completed: 0, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(line.includes('⚙ pdca'), `got: ${line}`);
+});
+
+test('renderProjectLine hides badge when showOrchestration is false', () => {
+  const ctx = baseContext();
+  ctx.config.display.showOrchestration = false;
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'executing-plans', active: true, objective: '',
+    taskCounts: { total: 7, completed: 3, inProgress: 0 }, agentsActive: 0, updatedAt: null,
+  };
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  assert.ok(!line.includes('executing-plans'), `got: ${line}`);
+});
+
+// The detail line is layout-independent by contract: display.showOrchestrationDetail
+// is documented as a plain opt-in line, with no mention of a layout restriction.
+for (const lineLayout of ['compact', 'expanded']) {
+  test(`orchestration detail line renders in ${lineLayout} layout`, () => {
+    const ctx = baseContext();
+    ctx.config.lineLayout = lineLayout;
+    ctx.config.display.showOrchestrationDetail = true;
+    ctx.orchestration = {
+      source: 'superpowers', mode: 'sdd', active: true, objective: 'herdr-backend',
+      taskCounts: { total: 8, completed: 7, inProgress: 1 }, agentsActive: 0, updatedAt: null,
+    };
+    const lines = captureRenderLines(ctx).map(stripAnsi);
+    assert.ok(
+      lines.some((l) => l.includes('✦ sdd: herdr-backend (7/8)')),
+      `got: ${JSON.stringify(lines)}`,
+    );
+  });
+
+  test(`orchestration detail line stays off by default in ${lineLayout} layout`, () => {
+    const ctx = baseContext();
+    ctx.config.lineLayout = lineLayout;
+    ctx.orchestration = {
+      source: 'superpowers', mode: 'sdd', active: true, objective: 'herdr-backend',
+      taskCounts: { total: 8, completed: 7, inProgress: 1 }, agentsActive: 0, updatedAt: null,
+    };
+    const lines = captureRenderLines(ctx).map(stripAnsi);
+    assert.ok(!lines.some((l) => l.includes('herdr-backend')), `got: ${JSON.stringify(lines)}`);
+  });
+}
+
+function inlineDetailContext(lineLayout) {
+  const ctx = baseContext();
+  ctx.config.lineLayout = lineLayout;
+  ctx.config.display.showOrchestrationDetail = true;
+  ctx.config.display.orchestrationDetailLayout = 'inline';
+  ctx.orchestration = {
+    source: 'superpowers', mode: 'subagent-driven-development', active: true,
+    objective: 'demo-webapp-redesign',
+    taskCounts: { total: 16, completed: 1, inProgress: 1 }, agentsActive: 1, updatedAt: null,
+  };
+  return ctx;
+}
+
+test("orchestrationDetailLayout 'inline' folds the objective into the expanded badge", () => {
+  const lines = captureRenderLines(inlineDetailContext('expanded')).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign 1/16')),
+    `got: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' suppresses the separate line in expanded", () => {
+  const lines = captureRenderLines(inlineDetailContext('expanded')).map(stripAnsi);
+  const detailLines = lines.filter((l) => l.includes('demo-webapp-redesign'));
+  assert.equal(detailLines.length, 1, `objective rendered twice: ${JSON.stringify(lines)}`);
+  assert.ok(!lines.some((l) => l.includes('· 1 agents')), `got: ${JSON.stringify(lines)}`);
+});
+
+// The badge lives in renderProjectLine, which the compact layout never calls,
+// so there is nothing inline to fold into and the detail line must survive.
+test("orchestrationDetailLayout 'inline' keeps the detail line in compact", () => {
+  const lines = captureRenderLines(inlineDetailContext('compact')).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail must not vanish in compact: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout defaults to 'line', leaving the badge short", () => {
+  const ctx = inlineDetailContext('expanded');
+  delete ctx.config.display.orchestrationDetailLayout;
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development 1/16')),
+    `badge should stay short: ${JSON.stringify(lines)}`,
+  );
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail line should render: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' keeps the detail line when the badge is hidden", () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.config.display.showOrchestration = false;
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+    `detail must not vanish entirely: ${JSON.stringify(lines)}`,
+  );
+});
+
+test("orchestrationDetailLayout 'inline' falls back to the detail line with no objective", () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.orchestration.objective = '';
+  const lines = captureRenderLines(ctx).map(stripAnsi);
+  assert.ok(
+    lines.some((l) => l.includes('✦ subagent-driven-development (1/16)')),
+    `got: ${JSON.stringify(lines)}`,
+  );
+});
+
+// colors.orchestration scopes the glyph + mode in BOTH layouts, so a custom
+// palette can lift the badge without repainting the global label color.
+test('inline orchestration badge colors the glyph + mode, not dim', () => {
+  const ctx = inlineDetailContext('expanded');
+  const line = captureRenderLinesRaw(ctx).find((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+  assert.ok(line, 'badge line missing');
+  assert.ok(line.includes('\x1b[36m✦'), `glyph not cyan: ${JSON.stringify(line)}`);
+  assert.ok(line.includes('\x1b[36msubagent-driven-development'), `mode not cyan: ${JSON.stringify(line)}`);
+});
+
+test('colors.orchestration repaints the glyph + mode in both layouts', () => {
+  for (const [layout, expectDetailLine] of [['inline', false], ['line', true]]) {
+    const ctx = inlineDetailContext('expanded');
+    ctx.config.display.orchestrationDetailLayout = layout;
+    ctx.config.colors.orchestration = 'brightMagenta';
+    const lines = captureRenderLinesRaw(ctx);
+    const matches = lines.filter((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+    assert.ok(matches.length > 0, `badge missing for layout=${layout}`);
+    for (const m of matches) {
+      assert.ok(
+        m.includes('\x1b[95m✦') && m.includes('\x1b[95msubagent-driven-development'),
+        `layout=${layout} ignored colors.orchestration: ${JSON.stringify(m)}`,
+      );
+    }
+    if (expectDetailLine) {
+      assert.ok(
+        matches.some((m) => stripAnsi(m).includes('✦ subagent-driven-development: demo-webapp-redesign (1/16)')),
+        `layout=line should keep the detail line: ${JSON.stringify(matches)}`,
+      );
+    }
+  }
+});
+
+test('orchestration objective stays on colors.label, counts stay dim', () => {
+  const ctx = inlineDetailContext('expanded');
+  ctx.config.colors.orchestration = 'brightMagenta';
+  ctx.config.colors.label = 'green';
+  const badge = captureRenderLinesRaw(ctx).find((l) => stripAnsi(l).includes('✦ subagent-driven-development'));
+  assert.ok(badge.includes('\x1b[32m: demo-webapp-redesign'), `objective not on colors.label: ${JSON.stringify(badge)}`);
+  assert.ok(badge.includes('\x1b[2m 1/16'), `counts not dim: ${JSON.stringify(badge)}`);
 });
 
 test('renderSessionLine shows custom provider before the model when showProvider is on', () => {
@@ -1730,7 +1965,10 @@ test('renderToolsLine keeps default tool cap and full names', () => {
   ];
 
   const line = stripAnsi(renderToolsLine(ctx) ?? '');
-  assert.ok(line.includes('mcp__plugin_context-mode_context-mode__ctx_batch_execute'));
+  // Fork divergence: the fork always compresses MCP tool names to `<scope>:<fn>`
+  // via formatToolName (OMC-compat readability), even when toolNameMaxLength is 0.
+  // Upstream renders the raw `mcp__…` name here; the fork shows the scoped form.
+  assert.ok(line.includes('context-mode:ctx_batch_execute'));
   assert.ok(!line.includes('Write ×1'));
 });
 
@@ -1822,7 +2060,11 @@ test('renderToolsLine preserves running targets and path truncation with shorten
   ];
 
   const line = stripAnsi(renderToolsLine(ctx) ?? '');
-  assert.ok(line.includes('lon…'));
+  // Fork divergence: running tool names are compressed by formatToolName first
+  // (`mcp__plugin__long_running_tool` → `plugin:long_running_tool`) and only then
+  // capped by toolNameMaxLength, so a max of 4 yields `plu…` rather than upstream's
+  // last-segment `lon…`. Target truncation is unaffected.
+  assert.ok(line.includes('plu…'));
   assert.ok(line.includes('.../authentication.ts'));
 });
 
@@ -1927,8 +2169,9 @@ test('renderAgentsLine renders completed agents', () => {
     },
   ];
 
+  // 'Explore' capitalized: the fork's default agentNamespaceMode is 'strip'.
   const line = withNow(30_000, () => renderAgentsLine(ctx));
-  assert.ok(line?.includes('explore'));
+  assert.ok(line?.includes('Explore'));
   assert.ok(line?.includes('haiku'));
 });
 
@@ -1944,7 +2187,7 @@ test('renderAgentsLine expires completed agents on the next render after one min
     },
   ];
 
-  assert.ok(withNow(120_000, () => renderAgentsLine(ctx))?.includes('recent'));
+  assert.match(withNow(120_000, () => renderAgentsLine(ctx)) ?? '', /recent/i);
   assert.equal(withNow(120_001, () => renderAgentsLine(ctx)), null);
 });
 
@@ -2002,11 +2245,11 @@ test('renderAgentsLine gives all visible slots to running agents before complete
   ];
 
   const line = withNow(120_000, () => renderAgentsLine(ctx));
-  assert.doesNotMatch(line ?? '', /completed-/);
-  assert.doesNotMatch(line ?? '', /running-one/);
-  assert.match(line ?? '', /running-two/);
-  assert.match(line ?? '', /running-three/);
-  assert.match(line ?? '', /running-four/);
+  assert.doesNotMatch(line ?? '', /completed-/i);
+  assert.doesNotMatch(line ?? '', /running-one/i);
+  assert.match(line ?? '', /running-two/i);
+  assert.match(line ?? '', /running-three/i);
+  assert.match(line ?? '', /running-four/i);
 });
 
 test('renderAgentsLine fills remaining slots with the latest completed agents', () => {
@@ -2028,10 +2271,10 @@ test('renderAgentsLine fills remaining slots with the latest completed agents', 
   ];
 
   const line = withNow(120_000, () => renderAgentsLine(ctx));
-  assert.doesNotMatch(line ?? '', /completed-one/);
-  assert.match(line ?? '', /completed-two/);
-  assert.match(line ?? '', /completed-three/);
-  assert.match(line ?? '', /running-one/);
+  assert.doesNotMatch(line ?? '', /completed-one/i);
+  assert.match(line ?? '', /completed-two/i);
+  assert.match(line ?? '', /completed-three/i);
+  assert.match(line ?? '', /running-one/i);
 });
 
 test('renderAgentsLine truncates long descriptions and formats elapsed time', () => {
@@ -2132,7 +2375,7 @@ test('renderAgentsLine sanitizes untrusted agent labels before terminal output',
   ];
 
   const line = withNow(1_000, () => renderAgentsLine(ctx));
-  assert.match(line ?? '', /explore/);
+  assert.match(line ?? '', /explore/i);
   assert.match(line ?? '', /safevisible/);
   assert.doesNotMatch(line ?? '', /evil\.example|\x1b\]8|\x1b\[2J|\n|\u202e/);
 });
@@ -2166,8 +2409,8 @@ test('renderAgentsLine bounds untrusted agent types', () => {
   ];
 
   const line = withNow(1_000, () => renderAgentsLine(ctx));
-  assert.match(line ?? '', new RegExp(`${'x'.repeat(21)}\\.\\.\\.`));
-  assert.doesNotMatch(line ?? '', new RegExp('x'.repeat(22)));
+  assert.match(line ?? '', new RegExp(`${'x'.repeat(21)}\\.\\.\\.`, 'i'));
+  assert.doesNotMatch(line ?? '', new RegExp('x'.repeat(22), 'i'));
 });
 
 test('renderTodosLine handles in-progress and completed-only cases', () => {
@@ -3401,7 +3644,7 @@ test('render expanded layout honors custom elementOrder including activity place
   const combinedIndex = lines.findIndex(line => line.includes('Usage') && line.includes('Context'));
   const memoryIndex = lines.findIndex(line => line.includes('Approx RAM'));
   const environmentIndex = lines.findIndex(line => line.includes('CLAUDE.md'));
-  const agentIndex = lines.findIndex(line => line.includes('planner'));
+  const agentIndex = lines.findIndex(line => line.includes('Planner'));
   const todoIndex = lines.findIndex(line => line.includes('todo-marker'));
 
   assert.deepEqual(
@@ -4147,7 +4390,10 @@ test('agents line renders the compacted model beside the agent type', () => {
 
   const output = captureRenderLines(ctx).join('\n');
 
-  assert.match(output, /general-purpose \[sonnet-5\]: review the diff/);
+  // Fork divergence: display.agentNamespaceMode defaults to 'strip', which
+  // capitalizes the local agent name ('general-purpose' -> 'General-purpose').
+  // The assertion's subject is the compacted model label, not the casing.
+  assert.match(output, /General-purpose \[sonnet-5\]: review the diff/);
 });
 
 test('renderProjectLine keeps the default first-line order when projectLineOrder is absent', () => {

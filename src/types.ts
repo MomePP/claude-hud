@@ -1,5 +1,6 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
+import type { OrchestrationState } from './orchestration.js';
 import type { AuthInfo } from './auth.js';
 
 export interface StdinData {
@@ -148,6 +149,23 @@ export interface SessionTokenUsage {
   cacheReadTokens: number;
 }
 
+export interface LastRequestTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens?: number;
+}
+
+export interface ThinkingState {
+  active: boolean;
+  lastSeen: Date;
+}
+
+export interface PendingPermission {
+  toolName: string;
+  targetSummary: string;
+  timestamp: Date;
+}
+
 export interface TranscriptData {
   tools: ToolEntry[];
   skills: string[];
@@ -175,6 +193,9 @@ export interface TranscriptData {
   // a cache yet, in which case the default tier applies.
   promptCacheTtlSeconds?: number;
   sessionTokens?: SessionTokenUsage;
+  lastRequestTokenUsage?: LastRequestTokenUsage;
+  thinkingState?: ThinkingState;
+  pendingPermission?: PendingPermission;
   lastCompactBoundaryAt?: Date;
   lastCompactPostTokens?: number;
   // Number of compact_boundary entries (manual /compact or auto compaction)
@@ -185,6 +206,9 @@ export interface TranscriptData {
   // after `/advisor` is set (e.g. "claude-opus-4-7"). undefined when /advisor
   // is off or no assistant turn has happened yet.
   advisorModel?: string;
+  // Most-recent `superpowers:<skill>` invocation (prefix stripped) and its
+  // timestamp, for the orchestration phase badge's freshness window.
+  latestSuperpowersSkill?: { name: string; at: Date };
   // Current ultracode effort state from the most recent transcript signal
   // (`ultra_effort_enter`/`ultra_effort_exit` attachment or `/effort` output).
   // undefined when ultracode was never entered this session.
@@ -209,6 +233,7 @@ export interface RenderContext {
   memoryUsage: MemoryInfo | null;
   config: HudConfig;
   extraLabel: string | null;
+  orchestration?: OrchestrationState | null;
   outputStyle?: string;
   claudeCodeVersion?: string;
   effortLevel?: string;

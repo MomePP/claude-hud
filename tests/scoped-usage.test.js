@@ -221,3 +221,19 @@ test('shared limit warnings retain bounded scoped usage in both layouts', () => 
   assert.match(expanded, /Limit reached.*Fable 38%/);
   assert.match(compactLayout, /Limit reached.*Fable 38%/);
 });
+
+// Fork regression (0.9.0 sync): display.barStyle is a fork-only setting, and the
+// model-scoped window arrived from upstream after it. Its bar must use the same
+// glyph set as the 5h/weekly bars sitting beside it on the same line.
+test('renderSessionLine applies display.barStyle to model-scoped usage bars', () => {
+  const ctx = renderContext(
+    scopedUsage({ fiveHour: 25, sevenDay: 90 }),
+    { usageBarEnabled: true, barStyle: 'thin', sevenDayThreshold: 0 },
+  );
+
+  const line = stripAnsi(renderSessionLine(ctx));
+
+  // 'thin' style must not leave any default 'block' glyphs behind.
+  assert.doesNotMatch(line, /[█░]/, `block glyphs leaked into a thin-style line: ${line}`);
+  assert.match(line, /Fable/);
+});

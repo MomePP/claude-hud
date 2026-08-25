@@ -25,6 +25,10 @@ export type ModelFormatMode = 'full' | 'compact' | 'short';
  */
 export type EffortFormatMode = 'full' | 'symbol' | 'text';
 export type TimeFormatMode = 'relative' | 'absolute' | 'both' | 'elapsed' | 'elapsedAndAbsolute';
+export type ProjectStyleMode = 'pipes' | 'natural';
+export type BarStyleMode = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+export type AgentNamespaceMode = 'strip' | 'badge' | 'raw';
+export type OrchestrationSourceMode = 'auto' | 'superpowers' | 'omc' | 'off';
 export type CustomLinePosition = 'first' | 'last';
 export type HourCycleMode = 'auto' | 'h11' | 'h12' | 'h23' | 'h24';
 /**
@@ -53,6 +57,7 @@ export type HudElement = 'project' | 'addedDirs' | 'context' | 'usage' | 'prompt
  */
 export type FirstLineSegment = 'model' | 'project' | 'advisor' | 'sessionName' | 'version' | 'extra' | 'duration' | 'cost' | 'speed' | 'auth';
 export type AddedDirsLayout = 'inline' | 'line';
+export type OrchestrationDetailLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
@@ -67,9 +72,26 @@ export interface HudColorOverrides {
     git: HudColorValue;
     gitBranch: HudColorValue;
     label: HudColorValue;
+    /**
+     * Style for every `dim()` span — separators, counts, overflow markers and the
+     * connectives in the git and project segments. Defaults to SGR 2, which
+     * terminals render by blending against the background and therefore paint an
+     * opaque cell background for; set a concrete colour on a transparent terminal.
+     */
+    dim: HudColorValue;
     custom: HudColorValue;
-    barFilled: string;
-    barEmpty: string;
+    thinking: HudColorValue;
+    duration: HudColorValue;
+    orchestration: HudColorValue;
+    barFilled?: string;
+    barEmpty?: string;
+    /**
+     * Colour of the bar's unfilled track. Defaults to SGR 2 (dim), which
+     * terminals render by blending the foreground against the background — on a
+     * transparent terminal that forces the cell background to be painted opaque,
+     * so the track shows up as a solid box. Set an explicit colour to avoid it.
+     */
+    barEmptyColor?: HudColorValue;
 }
 export declare const DEFAULT_ELEMENT_ORDER: HudElement[];
 export declare const DEFAULT_MERGE_GROUPS: HudElement[][];
@@ -88,6 +110,14 @@ export interface HudConfig {
         showDirty: boolean;
         showAheadBehind: boolean;
         showFileStats: boolean;
+        showFileList: boolean;
+        /**
+         * Wrap the branch name in an OSC 8 hyperlink to its forge page. Terminals
+         * mark link cells with a decoration, and on a transparent terminal that
+         * decoration is drawn against an opaque cell background, so the branch
+         * shows up as a solid box. Turn this off to keep the branch plain text.
+         */
+        linkBranch: boolean;
         branchOverflow: GitBranchOverflowMode;
         pushWarningThreshold: number;
         pushCriticalThreshold: number;
@@ -134,6 +164,9 @@ export interface HudConfig {
         promptCacheTtlSeconds: number;
         showSessionTokens: boolean;
         showOutputStyle: boolean;
+        showThinkingIndicator: boolean;
+        showPendingPermission: boolean;
+        showLastRequestTokens: boolean;
         showSessionStartDate: boolean;
         showLastResponseAt: boolean;
         showCompactions: boolean;
@@ -156,6 +189,19 @@ export interface HudConfig {
         customLine: string;
         customLinePosition: CustomLinePosition;
         timeFormat: TimeFormatMode;
+        projectStyle: ProjectStyleMode;
+        naturalSeparator: string;
+        modelGlyph: string;
+        projectGlyph: string;
+        branchGlyph: string;
+        durationGlyph: string;
+        barStyle: BarStyleMode;
+        agentNamespaceMode: AgentNamespaceMode;
+        orchestrationSource: OrchestrationSourceMode;
+        showOrchestration: boolean;
+        showOrchestrationDetail: boolean;
+        orchestrationDetailLayout: OrchestrationDetailLayout;
+        orchestrationFreshnessMs: number;
         hourCycle: HourCycleMode;
         showClockSeconds: boolean;
         showAdvisor: boolean;

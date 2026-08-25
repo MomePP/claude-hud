@@ -1,4 +1,5 @@
 import { yellow, green, magenta, label } from './colors.js';
+import { formatNamespaced } from './format-namespace.js';
 import { truncateString } from '../utils/truncate.js';
 import { sanitizeDisplayText } from '../utils/sanitize.js';
 const MAX_RECENT_COMPLETED = 2;
@@ -40,9 +41,10 @@ export function renderAgentsLine(ctx) {
     if (toShow.length === 0) {
         return null;
     }
+    const namespaceMode = ctx.config?.display?.agentNamespaceMode ?? 'strip';
     const lines = [];
     for (const agent of toShow) {
-        lines.push(formatAgent(agent, colors, now));
+        lines.push(formatAgent(agent, colors, namespaceMode, now));
     }
     return lines.join('\n');
 }
@@ -89,9 +91,15 @@ function getStatusIcon(status) {
             return green('✓');
     }
 }
-function formatAgent(agent, colors, now) {
+function formatAgent(agent, colors, namespaceMode, now) {
     const statusIcon = getStatusIcon(agent.status);
-    const typeLabel = sanitizeAgentText(agent.type, AGENT_TYPE_MAX_LEN) || 'agent';
+    // Sanitize → namespace-format → bound, in that order. Sanitizing first keeps
+    // formatNamespaced from splitting on a colon inside an escape sequence (an
+    // OSC 8 hyperlink would otherwise surface its URL as the "local" name), and
+    // bounding last keeps a long `<ns>:<name>` pair from losing the local name to
+    // truncation before the prefix is stripped.
+    const cleanedType = sanitizeDisplayText(typeof agent.type === 'string' ? agent.type : '').trim();
+    const typeLabel = truncateString(formatNamespaced(cleanedType, namespaceMode), AGENT_TYPE_MAX_LEN) || 'agent';
     const type = magenta(typeLabel);
     const modelLabel = formatAgentModel(agent.model);
     const model = modelLabel ? label(`[${modelLabel}]`, colors) : '';
