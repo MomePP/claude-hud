@@ -3117,7 +3117,12 @@ test('renderUsageLine shows 7d reset countdown in bar mode when above threshold'
   assert.ok(line.includes('45%'), `should include 5h percentage in bar mode: ${line}`);
   assert.ok(line.includes('85%'), `should include 7d percentage: ${line}`);
   assert.ok(line.includes('(resets in 1d 4h)'), `should include 7d reset countdown in bar mode: ${line}`);
-  assert.ok(line.includes('|'), `should render both usage windows above the threshold: ${line}`);
+  // The divider follows display.naturalSeparator / projectStyle rather than a
+  // hardcoded pipe, so assert the two windows are separated, not which glyph does it.
+  assert.match(line, /45%.+85%/, `should render both usage windows above the threshold: ${line}`);
+  const between = line.slice(line.indexOf('45%') + 3, line.indexOf('Weekly'));
+  assert.ok(between.length > 0, `expected a separator between the windows: ${line}`);
+  assert.match(between, /^\s*\S?\s*$/, `expected only a separator between the windows: ${JSON.stringify(between)}`);
 });
 
 test('renderUsageLine can hide reset label in bar mode', () => {
@@ -3155,7 +3160,7 @@ test('renderUsageLine shows weekly-only usage without a ghost 5h section', () =>
   assert.ok(!line.includes('5h'), `should not render a ghost 5h section: ${line}`);
   assert.ok(line.includes('Weekly'), `should render the weekly window when it is the only usage value: ${line}`);
   assert.ok(line.includes('13%'), `should render the weekly percentage: ${line}`);
-  assert.ok(!line.includes('|'), `should not render a separator for a missing 5h window: ${line}`);
+  assert.ok(!line.includes('|') && !line.includes('│'), `should not render a separator for a missing 5h window: ${line}`);
 });
 
 test('renderSessionLine displays limit reached warning', () => {

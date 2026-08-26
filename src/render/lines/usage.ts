@@ -121,7 +121,7 @@ export function renderUsageLine(
       : null;
 
     if (fiveHourPart && sevenDayPart) {
-      return appendBalance(`${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
+      return appendBalance(`${fiveHourPart}${usageWindowSeparator(display)}${sevenDayPart}${scopedSuffix}`, balanceLabel);
     }
     const compactLine = fiveHourPart ?? sevenDayPart;
     if (compactLine) {
@@ -200,7 +200,7 @@ export function renderUsageLine(
       usageValueMode,
       wallClockOpts,
     });
-    return appendBalance(`${usageLabel} ${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
+    return appendBalance(`${usageLabel} ${fiveHourPart}${usageWindowSeparator(display)}${sevenDayPart}${scopedSuffix}`, balanceLabel);
   }
 
   return appendBalance(`${usageLabel} ${fiveHourPart}${scopedSuffix}`, balanceLabel);
@@ -223,6 +223,21 @@ export function sevenDayColors(
     return colors;
   }
   return { ...colors, usage: override, usageWarning: override, critical: override };
+}
+
+/**
+ * The divider between the 5-hour and weekly windows.
+ *
+ * Matches the separator `renderExpanded` puts between merged elements, so every
+ * top-level segment on the row is divided the same way. The hardcoded ASCII `|`
+ * this replaced was the only divider on the line that ignored the config, which
+ * showed up as a stray pipe between Usage and Weekly while Context and Usage
+ * were separated by `naturalSeparator`.
+ */
+function usageWindowSeparator(display: RenderContext['config']['display']): string {
+  return display?.projectStyle === 'natural'
+    ? (display?.naturalSeparator || ' · ')
+    : ' │ ';
 }
 
 /**

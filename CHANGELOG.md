@@ -4,6 +4,43 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-08-26 — MomePP fork (usage-window divider follows the config)
+
+Patch: the divider between the 5-hour and weekly usage windows was a hardcoded
+ASCII `|`, the only separator on that row that ignored the config. With Context
+and Usage already joined by `display.naturalSeparator`, the pipe read as a stray
+character mid-line.
+
+### Fixed — fork
+
+- **The 5h↔weekly divider now uses the same separator as merged elements.**
+  `renderExpanded` joins merged elements with `display.naturalSeparator` under
+  `projectStyle: 'natural'` and ` │ ` under `pipes`; the usage line's internal
+  divider now follows the same rule, so every top-level segment on the row is
+  separated identically. Applied to the expanded path and the `usageCompact`
+  path. `src/render/lines/usage.ts` (`usageWindowSeparator`).
+
+### Default-behavior changes visible on update
+
+- Under `projectStyle: 'pipes'` the divider changes from ASCII `|` to the
+  box-drawing `│` that style already uses elsewhere — same visual role, one
+  glyph. Under `natural` it becomes `naturalSeparator`, which is the point.
+- The scoped-window and balance-label joins keep their own `|`; they are
+  separate list joins, not this divider.
+
+### Tests
+
+1226 pass, 0 fail, 6 skipped (1232 total). Two upstream tests asserted the
+literal `|`; their real invariant is that the two windows are separated, not
+which glyph does it, so they now measure the gap between the 5-hour percentage
+and the `Weekly` label and assert it holds a separator and nothing else.
+
+### Bumped
+
+- `package.json` → `0.13.1`
+- `.claude-plugin/plugin.json` → `0.13.1`
+- `.claude-plugin/marketplace.json` (`metadata.version`) → `0.13.1`
+
 ## [0.13.0] - 2026-08-25 — MomePP fork (per-window weekly colour)
 
 Minor: one new optional fork colour key, `colors.sevenDay`, unset by default so

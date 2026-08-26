@@ -71,7 +71,9 @@ test('inline keeps Weekly on the usage line and emits no separate line', () => {
   const ctx = baseContext();
   const line = stripAnsi(renderUsageLine(ctx));
   assert.match(line, /Weekly/);
-  assert.match(line, /\|/, 'expected the pipe join between 5h and Weekly');
+  // Separated from the 5h window — by display.naturalSeparator / projectStyle,
+  // not the hardcoded pipe this used to assert.
+  assert.match(line, /25%.+Weekly/, `expected Weekly to follow the 5h window: ${line}`);
   assert.equal(renderWeeklyUsageLine(ctx), null);
 });
 
