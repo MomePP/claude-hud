@@ -81,7 +81,10 @@ function buildExtras(ctx: RenderContext): FirstLinePart[] {
     push(isNatural ? durationColor(durationText, colors) : label(durationText, colors), 'duration');
   }
 
-  const costEstimate = renderCostEstimate(ctx);
+  const costEstimate = renderCostEstimate(
+    ctx,
+    display?.projectStyle === 'natural' ? (display?.naturalSeparator || ' \u00B7 ') : ' \u2502 ',
+  );
   if (costEstimate) {
     push(costEstimate, 'cost');
   }

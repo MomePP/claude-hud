@@ -68,7 +68,7 @@ function buildExtras(ctx) {
             : `\u23F1\uFE0F  ${ctx.sessionDuration}`;
         push(isNatural ? durationColor(durationText, colors) : label(durationText, colors), 'duration');
     }
-    const costEstimate = renderCostEstimate(ctx);
+    const costEstimate = renderCostEstimate(ctx, display?.projectStyle === 'natural' ? (display?.naturalSeparator || ' \u00B7 ') : ' \u2502 ');
     if (costEstimate) {
         push(costEstimate, 'cost');
     }

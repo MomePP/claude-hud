@@ -4,7 +4,12 @@ import { getDailyCostUsd } from '../../daily-cost.js';
 import { t } from '../../i18n/index.js';
 import { label } from '../colors.js';
 
-export function renderCostEstimate(ctx: RenderContext): string | null {
+/**
+ * `separator` joins Cost and Today when both show. Callers pass the divider of
+ * the line the element sits on, so the pair splits the same way as every other
+ * segment there.
+ */
+export function renderCostEstimate(ctx: RenderContext, separator: string): string | null {
   const display = ctx.config?.display;
   const allowRoutedCost = display?.showRoutedCost === true;
   const parts: string[] = [];
@@ -30,5 +35,5 @@ export function renderCostEstimate(ctx: RenderContext): string | null {
     return null;
   }
 
-  return label(parts.join(' | '), ctx.config?.colors);
+  return label(parts.join(separator), ctx.config?.colors);
 }

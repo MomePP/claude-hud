@@ -360,7 +360,7 @@ export function renderSessionLine(ctx) {
     if (promptCacheLine) {
         push(promptCacheLine);
     }
-    const costEstimate = renderCostEstimate(ctx);
+    const costEstimate = renderCostEstimate(ctx, ' | ');
     if (costEstimate) {
         push(costEstimate, 'cost');
     }

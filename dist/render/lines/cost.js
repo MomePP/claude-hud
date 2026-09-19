@@ -2,7 +2,12 @@ import { resolveSessionCost, formatUsd } from '../../cost.js';
 import { getDailyCostUsd } from '../../daily-cost.js';
 import { t } from '../../i18n/index.js';
 import { label } from '../colors.js';
-export function renderCostEstimate(ctx) {
+/**
+ * `separator` joins Cost and Today when both show. Callers pass the divider of
+ * the line the element sits on, so the pair splits the same way as every other
+ * segment there.
+ */
+export function renderCostEstimate(ctx, separator) {
     const display = ctx.config?.display;
     const allowRoutedCost = display?.showRoutedCost === true;
     const parts = [];
@@ -24,6 +29,6 @@ export function renderCostEstimate(ctx) {
     if (parts.length === 0) {
         return null;
     }
-    return label(parts.join(' | '), ctx.config?.colors);
+    return label(parts.join(separator), ctx.config?.colors);
 }
 //# sourceMappingURL=cost.js.map

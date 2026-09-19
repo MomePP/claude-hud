@@ -399,7 +399,7 @@ export function renderSessionLine(ctx: RenderContext): string {
     push(promptCacheLine);
   }
 
-  const costEstimate = renderCostEstimate(ctx);
+  const costEstimate = renderCostEstimate(ctx, ' | ');
   if (costEstimate) {
     push(costEstimate, 'cost');
   }

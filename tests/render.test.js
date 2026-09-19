@@ -1588,6 +1588,36 @@ test('renderSessionLine shows the daily cost when showDailyCost is enabled', asy
   }
 });
 
+// Cost and Today share one element; its inner join follows the line it sits on
+// instead of a hardcoded ASCII pipe.
+for (const [projectStyle, naturalSeparator, expected] of [
+  ['natural', '   ', 'Cost $3.25   Today $1.25'],
+  ['pipes', undefined, 'Cost $3.25 │ Today $1.25'],
+]) {
+  test(`renderProjectLine joins Cost and Today with the ${projectStyle} separator`, async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), 'claude-hud-daily-sep-'));
+    const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    try {
+      const ctx = baseContext();
+      Object.assign(ctx.config.display, { showCost: true, showDailyCost: true, projectStyle, naturalSeparator });
+      ctx.stdin.session_id = `sep-${projectStyle}`;
+      ctx.stdin.cost = { total_cost_usd: 2.0 };
+      renderProjectLine(ctx);
+      ctx.stdin.cost = { total_cost_usd: 3.25 };
+      const line = stripAnsi(renderProjectLine(ctx));
+      assert.ok(line.includes(expected), `expected "${expected}", got: ${line}`);
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = originalConfigDir;
+      }
+      await rm(configDir, { recursive: true, force: true });
+    }
+  });
+}
+
 test('renderSessionLine keeps the daily cost hidden by default', () => {
   const ctx = baseContext();
   ctx.stdin.session_id = 'render-test-session';
