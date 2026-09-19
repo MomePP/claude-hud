@@ -4,6 +4,92 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-19 — MomePP fork (upstream sync: daily cost, scoped-usage toggle, cache clock)
+
+Upstream sync onto `939eb66` (10 upstream commits), reconstructed as one linear
+commit on the upstream base. Minor rather than patch: it adopts two new config
+options (`display.showDailyCost`, `display.showModelScopedUsage`), and the
+prompt-cache and background-agent fixes change what existing users see. Also
+ships a fork fix for `/claude-hud:setup` under an aliased `ls`.
+
+### Added — from upstream
+
+- **`display.showDailyCost`** (default `false`) — `Today $12.34`: cumulative
+  native `cost.total_cost_usd` across sessions, kept in a per-day
+  `daily-cost.json` ledger that resets at local midnight. Joins `showCost` on
+  the cost element. `src/daily-cost.ts`, `src/render/lines/cost.ts`.
+- **`display.showModelScopedUsage`** (default `true`) — set `false` to hide
+  per-model weekly windows (e.g. Fable) from stdin and the external snapshot;
+  hidden windows stop counting toward `usageThreshold`.
+- i18n keys `label.today` and `format.untilTime` (en, zh-Hans, zh-Hant).
+
+### Fixed — from upstream
+
+- The prompt-cache clock is anchored on the request start rather than on the
+  response, ignoring client-side slash-command records, interrupt markers and
+  subagent requests.
+- The prompt-cache value reads `until 14:30` (expiry) instead of `at 14:30`.
+- An Agent `tool_result` with `toolUseResult.isAsync` or
+  `status: 'async_launched'` marks the agent as background, so it stays
+  running until its task-notification arrives.
+- `git diff --numstat` passes `--no-optional-locks`, so a timed-out poll cannot
+  leave `.git/index.lock` behind.
+- Config validation and read no longer race (TOCTOU).
+
+### Fixed — fork
+
+- **`/claude-hud:setup` Step 1 works with an aliased `ls`.** eza/lsd-style
+  aliases prefix paths with icons, which broke the version-sort pipeline and
+  reported `NOT_INSTALLED` on a working install. Now `command ls -d`.
+  `commands/setup.md:34`.
+- **The separate weekly line honours `showModelScopedUsage`.** Under
+  `sevenDayLayout: 'line'`, `renderWeeklyUsageLine` counted hidden scoped
+  windows toward `usageThreshold`, so one could keep the weekly line on screen
+  after the usage line above it had gone. `src/render/lines/usage.ts`
+  (`renderWeeklyUsageLine`).
+
+### Conflict resolutions (kept fork features intact)
+
+- `src/transcript.ts` — fork file kept; the request-start cache anchor
+  (`promptCachePendingRequestAt`, `isPromptCacheRequestStart`) and the
+  `toolUseResult` async detection were grafted into the `handleLine` closure
+  and the fork's `isBackgroundLaunch` path. All three background completion
+  signals remain wired. `TRANSCRIPT_CACHE_VERSION` 17 → 19 (past upstream's 18).
+- `src/git.ts` — fork file kept; `--no-optional-locks` grafted.
+- `README.md` / `README.zh.md` / `CHANGELOG.md` — fork side kept; the new
+  upstream options and the zh `externalUsagePath` absolute-path note carried in.
+- `tests/format-reset-time.test.js` — fork's stricter anchored regex kept.
+
+### Skipped (per fork direction)
+
+- Exact zh/en options-table parity in `tests/readme-options.test.js`: fork-only
+  options are documented in English only. The test now asserts the zh table
+  holds no key the English README has dropped.
+- `commands/setup.md` stays the fork's launcher-based setup.
+- No `.github/workflows`; default colours, optional bar colours and
+  `colors.thinking` / `colors.duration` / `colors.orchestration` unchanged.
+
+### Default-behavior changes visible on update
+
+- With `showPromptCache` on, the value reads `until 14:30` and restarts its
+  clock as soon as a request is sent.
+- Background agents launched without `run_in_background` in their input (for
+  example auto-backgrounded ones) now stay `running` on the agents line until
+  they finish, instead of showing as completed at launch.
+
+### Tests
+
+1265 pass, 0 fail. New: a `sevenDayLayout: 'line'` regression test for hidden
+scoped windows. `tests/cost-coverage.test.js` pins `now` in the Sonnet 5.1
+pricing case, which began failing once introductory pricing ended on
+2026-09-01. `tests/transcript-omc.test.js` still covers the fork parser paths.
+
+### Bumped
+
+- `package.json` → `0.14.0`
+- `.claude-plugin/plugin.json` → `0.14.0`
+- `.claude-plugin/marketplace.json` → `0.14.0`
+
 ## [0.13.1] - 2026-08-26 — MomePP fork (usage-window divider follows the config)
 
 Patch: the divider between the 5-hour and weekly usage windows was a hardcoded
