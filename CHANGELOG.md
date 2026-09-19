@@ -4,6 +4,38 @@ All notable changes to Claude HUD will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-19 — MomePP fork (Cost/Today separator follows the config)
+
+Patch: the cost element joined `Cost $x` and `Today $y` (the latter new in
+0.14.0 via upstream's `display.showDailyCost`) with a hardcoded ASCII ` | `,
+the same stray-pipe problem 0.13.1 fixed for the 5h↔weekly divider.
+
+### Fixed — fork
+
+- **Cost and Today are joined by the line's own separator.**
+  `renderCostEstimate` now takes the separator from its caller: the project
+  line passes `display.naturalSeparator` under `projectStyle: 'natural'` and
+  ` │ ` under `pipes`; the compact session line passes its own ` | `.
+  `src/render/lines/cost.ts`, `src/render/lines/project.ts`,
+  `src/render/session-line.ts`.
+
+### Default-behavior changes visible on update
+
+- Only with both `showCost` and `showDailyCost` enabled: the divider between
+  them becomes `naturalSeparator` (natural) or `│` (pipes). Compact layout is
+  unchanged.
+
+### Tests
+
+1267 pass, 0 fail. Two new `renderProjectLine` tests cover the natural (custom
+blank separator) and pipes joins.
+
+### Bumped
+
+- `package.json` → `0.14.1`
+- `.claude-plugin/plugin.json` → `0.14.1`
+- `.claude-plugin/marketplace.json` → `0.14.1`
+
 ## [0.14.0] - 2026-09-19 — MomePP fork (upstream sync: daily cost, scoped-usage toggle, cache clock)
 
 Upstream sync onto `939eb66` (10 upstream commits), reconstructed as one linear
