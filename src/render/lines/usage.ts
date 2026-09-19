@@ -70,6 +70,7 @@ export function renderUsageLine(
                 colors,
                 usageBarEnabled: display?.usageBarEnabled ?? true,
                 barWidth: barWidthForScoped,
+                barStyle: display?.barStyle,
                 timeFormat,
                 showResetLabel,
                 forceLabel: true,
@@ -118,11 +119,11 @@ export function renderUsageLine(
       ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, FIVE_HOUR_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
       : null;
     const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, colors, usageValueMode, wallClockOpts)
+      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, sevenDayColors(colors), usageValueMode, wallClockOpts)
       : null;
 
     if (fiveHourPart && sevenDayPart) {
-      return appendBalance(`${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
+      return appendBalance(`${fiveHourPart}${usageWindowSeparator(display)}${sevenDayPart}${scopedSuffix}`, balanceLabel);
     }
     const compactLine = fiveHourPart ?? sevenDayPart;
     if (compactLine) {
@@ -133,6 +134,7 @@ export function renderUsageLine(
 
   const usageBarEnabled = display?.usageBarEnabled ?? true;
   const barWidth = getAdaptiveBarWidth();
+  const barStyle = display?.barStyle;
 
   if (fiveHour === null && sevenDay === null) {
     return scopedSuffix
@@ -149,9 +151,10 @@ export function renderUsageLine(
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       windowMs: SEVEN_DAY_WINDOW_MS,
-      colors,
+      colors: sevenDayColors(colors),
       usageBarEnabled,
       barWidth,
+      barStyle,
       timeFormat,
       showResetLabel,
       forceLabel: true,
@@ -170,22 +173,28 @@ export function renderUsageLine(
     colors,
     usageBarEnabled,
     barWidth,
+    barStyle,
     timeFormat,
     showResetLabel,
     usageValueMode,
     wallClockOpts,
   });
 
-  if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
+  // Under `sevenDayLayout: 'line'` the weekly window is rendered by
+  // renderWeeklyUsageLine instead, so it is left off here. The usage line stays
+  // a single line either way — merge groups join elements into one row, so a
+  // multi-line return would land mid-row and break the join.
+  if (sevenDay !== null && sevenDay >= sevenDayThreshold && !weeklyOnSeparateLine(display)) {
     const sevenDayPart = formatUsageWindowPart({
       label: t("label.weekly"),
       labelKey: "label.weekly",
       percent: sevenDay,
       resetAt: ctx.usageData.sevenDayResetAt,
       windowMs: SEVEN_DAY_WINDOW_MS,
-      colors,
+      colors: sevenDayColors(colors),
       usageBarEnabled,
       barWidth,
+      barStyle,
       timeFormat,
       showResetLabel,
       forceLabel: true,
@@ -193,10 +202,123 @@ export function renderUsageLine(
       usageValueMode,
       wallClockOpts,
     });
-    return appendBalance(`${usageLabel} ${fiveHourPart} | ${sevenDayPart}${scopedSuffix}`, balanceLabel);
+    return appendBalance(`${usageLabel} ${fiveHourPart}${usageWindowSeparator(display)}${sevenDayPart}${scopedSuffix}`, balanceLabel);
   }
 
   return appendBalance(`${usageLabel} ${fiveHourPart}${scopedSuffix}`, balanceLabel);
+}
+
+/**
+ * The colour set the weekly window renders with.
+ *
+ * `colors.sevenDay` pins all three ladder keys to one value, which is what
+ * takes the weekly window out of the 75/90 escalation. The bar and the value
+ * both read the ladder through getQuotaColor, so overriding its inputs covers
+ * them together and no shared colour helper needs a new parameter. Returns the
+ * caller's colours untouched when the override is unset.
+ */
+export function sevenDayColors(
+  colors: RenderContext["config"]["colors"],
+): RenderContext["config"]["colors"] {
+  const override = colors?.sevenDay;
+  if (override === undefined) {
+    return colors;
+  }
+  return { ...colors, usage: override, usageWarning: override, critical: override };
+}
+
+/**
+ * The divider between the 5-hour and weekly windows.
+ *
+ * Matches the separator `renderExpanded` puts between merged elements, so every
+ * top-level segment on the row is divided the same way. The hardcoded ASCII `|`
+ * this replaced was the only divider on the line that ignored the config, which
+ * showed up as a stray pipe between Usage and Weekly while Context and Usage
+ * were separated by `naturalSeparator`.
+ */
+function usageWindowSeparator(display: RenderContext['config']['display']): string {
+  return display?.projectStyle === 'natural'
+    ? (display?.naturalSeparator || ' · ')
+    : ' │ ';
+}
+
+/**
+ * True when the weekly window should be split onto its own line. Compact usage
+ * is deliberately excluded: its whole point is one terse row, and its `7d` part
+ * carries no label to anchor a separate line.
+ */
+function weeklyOnSeparateLine(display: RenderContext['config']['display']): boolean {
+  return (display?.sevenDayLayout ?? 'inline') === 'line'
+    && (display?.usageCompact ?? false) === false;
+}
+
+/**
+ * The weekly (7-day) window as a standalone line, for `sevenDayLayout: 'line'`.
+ *
+ * Returns null whenever the weekly window belongs on the usage line instead —
+ * inline layout, compact usage, below `sevenDayThreshold`, no seven-day data, or
+ * a session with no five-hour window at all (nothing to split away from).
+ */
+export function renderWeeklyUsageLine(
+  ctx: RenderContext,
+  labelOptions: ProgressLabelInput = {},
+): string | null {
+  const display = ctx.config?.display;
+  const colors = ctx.config?.colors;
+
+  if (display?.showUsage === false || !ctx.usageData || shouldHideUsage(ctx.stdin)) {
+    return null;
+  }
+
+  if (!weeklyOnSeparateLine(display) || isLimitReached(ctx.usageData)) {
+    return null;
+  }
+
+  const sevenDay = ctx.usageData.sevenDay;
+  const fiveHour = ctx.usageData.fiveHour;
+  if (sevenDay === null || fiveHour === null) {
+    return null;
+  }
+
+  if (sevenDay < (display?.sevenDayThreshold ?? 80)) {
+    return null;
+  }
+
+  // The usage line's own visibility gate. Without this the weekly line could
+  // outlive the row it belongs under. Hidden scoped windows don't count, same
+  // as on the usage line.
+  const scopedWindows = display?.showModelScopedUsage === false
+    ? []
+    : ctx.usageData.scopedWindows ?? [];
+  const effectiveUsage = Math.max(
+    fiveHour,
+    sevenDay,
+    ...scopedWindows.map((window) => window.percent ?? 0),
+  );
+  if (effectiveUsage < (display?.usageThreshold ?? 0)) {
+    return null;
+  }
+
+  return formatUsageWindowPart({
+    label: t("label.weekly"),
+    labelKey: "label.weekly",
+    percent: sevenDay,
+    resetAt: ctx.usageData.sevenDayResetAt,
+    windowMs: SEVEN_DAY_WINDOW_MS,
+    colors: sevenDayColors(colors),
+    usageBarEnabled: display?.usageBarEnabled ?? true,
+    barWidth: getAdaptiveBarWidth(),
+    barStyle: display?.barStyle,
+    timeFormat: normalizeTimeFormat(display?.timeFormat),
+    showResetLabel: display?.showResetLabel ?? true,
+    forceLabel: true,
+    labelOptions,
+    usageValueMode: display?.usageValue ?? 'percent',
+    wallClockOpts: {
+      hourCycle: display?.hourCycle ?? 'auto',
+      showSeconds: display?.showClockSeconds ?? false,
+    },
+  });
 }
 
 function appendBalance(line: string, balanceLabel: string | null): string {
@@ -243,6 +365,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   timeFormat = 'relative',
   showResetLabel,
   forceLabel = false,
@@ -258,6 +381,7 @@ function formatUsageWindowPart({
   colors?: RenderContext["config"]["colors"];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
   timeFormat?: TimeFormatMode;
   showResetLabel: boolean;
   forceLabel?: boolean;
@@ -281,8 +405,8 @@ function formatUsageWindowPart({
 
   if (usageBarEnabled) {
     const body = resetSuffix
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} ${resetSuffix}`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} ${resetSuffix}`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

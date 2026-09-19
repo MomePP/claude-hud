@@ -206,6 +206,7 @@ Claude Code → stdin JSON → claude-hud → stdout → 在终端中显示
 | `display.hourCycle` | `auto` \| `h11` \| `h12` \| `h23` \| `h24` | `auto` | 墙钟重置时间（`absolute`/`both`/`elapsedAndAbsolute` 模式）的时制。`auto` 跟随系统区域设置；`h23` 强制使用 24 小时制（`14:30`），不受区域设置影响 |
 | `display.showClockSeconds` | boolean | false | 在墙钟重置时间中显示秒数，如 `at 14:30:07` |
 | `display.sevenDayThreshold` | 0-100 | 80 | 当 7 天使用率 ≥ 阈值时显示（0 = 始终显示） |
+| `display.sevenDayLayout` | `inline` \| `line` | `inline` | 7 天窗口越过 `sevenDayThreshold` 后的位置。`inline` 追加在使用率行的 5 小时窗口之后（当前行为）；`line` 让它单独占一行，避免合并后的 Context/Usage 行在用量高的一周里超出终端宽度。在 `display.usageCompact` 下，以及没有 5 小时窗口的会话中（没有可拆分的内容），回退为 inline。 |
 | `display.externalUsagePath` | string | `""` | 可选的本地使用率快照文件**绝对路径**。相对路径会被忽略。stdin `rate_limits` 存在时会附加 `balance_label`，并在 stdin 缺少 `model_scoped` 窗口时用快照补齐；stdin 窗口缺失时可整体作为回退 |
 | `display.externalUsageWritePath` | string | `""` | 可选的绝对 `.json` 路径，父目录必须已存在。当 stdin `rate_limits` 存在时，ClaudeHUD 会写入私有权限快照供其他本地工具读取。相对路径、非 json 文件和缺失父目录会被忽略 |
 | `display.externalUsageFreshnessMs` | number | `300000` | 外部使用率快照允许的最长存活时间，超时后会被忽略 |
@@ -236,6 +237,7 @@ Claude Code → stdin JSON → claude-hud → stdout → 在终端中显示
 | `colors.usage` | 颜色值 | `brightBlue` | 使用率进度条和低于警告阈值时百分比的颜色 |
 | `colors.warning` | 颜色值 | `yellow` | 上下文阈值和使用率警告文本的警告颜色 |
 | `colors.usageWarning` | 颜色值 | `brightMagenta` | 使用率进度条和接近阈值时百分比的警告颜色 |
+| `colors.sevenDay` | 颜色值 | _(未设置)_ | 为 7 天使用率窗口在**所有**区间指定统一颜色。未设置时，7 天窗口与 5 小时窗口、内存条共用三段阶梯（<75% 用 `colors.usage`，75–89% 用 `colors.usageWarning`，≥90% 用 `colors.critical`），因此多数时候两个用量窗口只能靠标签区分。设置后 7 天窗口固定为该颜色并**退出该阶梯**，不再在 75% 或 90% 升级。 |
 | `colors.critical` | 颜色值 | `red` | 达到限制状态和严重阈值的颜色 |
 | `colors.model` | 颜色值 | `cyan` | 模型徽章颜色，如 `[Opus]` |
 | `colors.project` | 颜色值 | `yellow` | 项目路径的颜色 |

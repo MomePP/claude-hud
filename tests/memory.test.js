@@ -18,6 +18,23 @@ test('getMemoryUsage returns coarse system RAM usage with clamped values', async
   });
 });
 
+test('Windows memory path (os.totalmem/freemem shape) computes valid usage', async () => {
+  // Windows dispatches to the generic os.* reader; validate its math here since
+  // we can't exercise process.platform === 'win32' on the dev machine.
+  _setMemoryReaderForTests(() => ({
+    totalBytes: 32 * 1024 ** 3,
+    freeBytes: 8 * 1024 ** 3,
+  }));
+
+  const memoryUsage = await getMemoryUsage();
+
+  assert.ok(memoryUsage);
+  assert.equal(memoryUsage.totalBytes, 32 * 1024 ** 3);
+  assert.equal(memoryUsage.usedPercent, 75); // (32 - 8) / 32
+
+  _setMemoryReaderForTests(null);
+});
+
 test('getMemoryUsage returns null when memory lookup fails', async () => {
   _setMemoryReaderForTests(() => {
     throw new Error('boom');

@@ -76,8 +76,24 @@ export function magenta(text: string): string {
   return colorize(text, MAGENTA);
 }
 
+// Resolved once per run rather than passed to every call. `dim()` has ~16 call
+// sites, most without a `colors` argument in scope, and threading config into
+// all of them to solve one rendering problem is not worth the churn — so this
+// mirrors setLanguage() and is set alongside it.
+//
+// The rendering problem: terminals implement dim by blending the foreground
+// against the background, which means the cell background has to be painted to
+// blend against. On a transparent terminal every dim span therefore shows up as
+// an opaque box. Setting `colors.dim` to a concrete colour avoids SGR 2
+// entirely; leaving it unset keeps the default dim everywhere.
+let dimStyle: string = DIM;
+
+export function setDimStyle(value: HudColorValue | undefined): void {
+  dimStyle = resolveAnsi(value, DIM);
+}
+
 export function dim(text: string): string {
-  return colorize(text, DIM);
+  return colorize(text, dimStyle);
 }
 
 export function claudeOrange(text: string): string {
@@ -106,6 +122,20 @@ export function label(text: string, colors?: Partial<HudColorOverrides>): string
 
 export function custom(text: string, colors?: Partial<HudColorOverrides>): string {
   return withOverride(text, colors?.custom, CLAUDE_ORANGE);
+}
+
+export function thinking(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.thinking, DIM);
+}
+
+export function duration(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.duration, DIM);
+}
+
+// Scoped to the orchestration glyph + mode in both detail layouts, so a custom
+// palette can lift that segment without repainting the global label color.
+export function orchestration(text: string, colors?: Partial<HudColorOverrides>): string {
+  return withOverride(text, colors?.orchestration, CYAN);
 }
 
 export function warning(text: string, colors?: Partial<HudColorOverrides>): string {
@@ -139,29 +169,44 @@ export function getQuotaColor(percent: number, colors?: Partial<HudColorOverride
   return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
 
-export function quotaBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
+export type BarStyleName = 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
+
+const BAR_CHARS: Record<BarStyleName, { filled: string; empty: string }> = {
+  block:    { filled: '█', empty: '░' },
+  square:   { filled: '▰', empty: '▱' },
+  thin:     { filled: '━', empty: '─' },
+  vertical: { filled: '▮', empty: '▯' },
+  dots:     { filled: '●', empty: '○' },
+  shade:    { filled: '▓', empty: '░' },
+  double:   { filled: '═', empty: '─' },
+};
+
+function barChars(style: BarStyleName | undefined): { filled: string; empty: string } {
+  return BAR_CHARS[style ?? 'block'] ?? BAR_CHARS.block;
+}
+
+export function quotaBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
   const color = getQuotaColor(safePercent, colors);
-  const filledChar = colors?.barFilled ?? '█';
-  const emptyChar = colors?.barEmpty ?? '░';
-  return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
+  const chars = barChars(style);
+  const filledChar = colors?.barFilled ?? chars.filled;
+  const emptyChar = colors?.barEmpty ?? chars.empty;
+  const emptyColor = resolveAnsi(colors?.barEmptyColor, DIM);
+  return `${color}${filledChar.repeat(filled)}${emptyColor}${emptyChar.repeat(empty)}${RESET}`;
 }
 
-export function coloredBar(
-  percent: number,
-  width: number = 10,
-  colors?: Partial<HudColorOverrides>,
-  thresholds?: ContextThresholds,
-): string {
+export function coloredBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>, style?: BarStyleName, thresholds?: ContextThresholds): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const filled = Math.round((safePercent / 100) * safeWidth);
   const empty = safeWidth - filled;
   const color = getContextColor(safePercent, colors, thresholds);
-  const filledChar = colors?.barFilled ?? '█';
-  const emptyChar = colors?.barEmpty ?? '░';
-  return `${color}${filledChar.repeat(filled)}${DIM}${emptyChar.repeat(empty)}${RESET}`;
+  const chars = barChars(style);
+  const filledChar = colors?.barFilled ?? chars.filled;
+  const emptyChar = colors?.barEmpty ?? chars.empty;
+  const emptyColor = resolveAnsi(colors?.barEmptyColor, DIM);
+  return `${color}${filledChar.repeat(filled)}${emptyColor}${emptyChar.repeat(empty)}${RESET}`;
 }

@@ -2,10 +2,11 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, resolveModelName, shouldHideUsage } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, thinking as thinkingColor, duration as durationColor, RESET } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { renderPromptCacheLine } from './lines/prompt-cache.js';
+import { sevenDayColors } from './lines/usage.js';
 import { renderSessionTimeLine } from './lines/session-time.js';
 import { renderAdvisorLine } from './lines/advisor.js';
 import { t } from '../i18n/index.js';
@@ -49,7 +50,7 @@ export function renderSessionLine(ctx: RenderContext): string {
     critical: display?.contextCriticalThreshold,
   };
   const barWidth = getAdaptiveBarWidth();
-  const bar = coloredBar(percent, barWidth, colors, contextThresholds);
+  const bar = coloredBar(percent, barWidth, colors, display?.barStyle, contextThresholds);
 
   const parts: FirstLinePart[] = [];
   const push = (text: string, key: FirstLineSegment | null = null) => parts.push({ key, text });
@@ -206,6 +207,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled: display?.usageBarEnabled ?? true,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,
@@ -248,7 +250,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             : null;
           const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
           const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-            ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors, usageValueMode, wallClockOpts)
+            ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, sevenDayColors(colors), usageValueMode, wallClockOpts)
             : null;
 
           if (fiveHourPart && sevenDayPart) {
@@ -265,9 +267,10 @@ export function renderSessionLine(ctx: RenderContext): string {
             label: t('label.weekly'),
             percent: sevenDay,
             resetAt: ctx.usageData.sevenDayResetAt,
-            colors,
+            colors: sevenDayColors(colors),
             usageBarEnabled,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
             forceLabel: true,
@@ -284,6 +287,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             colors,
             usageBarEnabled,
             barWidth,
+            barStyle: display?.barStyle,
             timeFormat,
             showResetLabel,
             usageValueMode,
@@ -296,9 +300,10 @@ export function renderSessionLine(ctx: RenderContext): string {
               label: t('label.weekly'),
               percent: sevenDay,
               resetAt: ctx.usageData.sevenDayResetAt,
-              colors,
+              colors: sevenDayColors(colors),
               usageBarEnabled,
               barWidth,
+              barStyle: display?.barStyle,
               timeFormat,
               showResetLabel,
               forceLabel: true,
@@ -354,7 +359,34 @@ export function renderSessionLine(ctx: RenderContext): string {
   }
 
   if (display?.showDuration === true && ctx.sessionDuration) {
-    push(label(`⏱️  ${ctx.sessionDuration}`, colors), 'duration');
+    const isNatural = display?.projectStyle === 'natural';
+    const durationGlyph = display?.durationGlyph ?? '';
+    const durationText = isNatural
+      ? (durationGlyph ? `${durationGlyph} ${ctx.sessionDuration}` : ctx.sessionDuration)
+      : `\u23F1\uFE0F  ${ctx.sessionDuration}`;
+    push(isNatural ? durationColor(durationText, colors) : label(durationText, colors), 'duration');
+  }
+
+  // Fork inline indicators (match project.ts expanded-mode behavior so
+  // compact users aren't silently missing them after the 0.2.0 rebase).
+  if ((display?.showThinkingIndicator ?? true) && ctx.transcript.thinkingState?.active) {
+    push(thinkingColor('\u223F thinking', colors));
+  }
+
+  if ((display?.showPendingPermission ?? true) && ctx.transcript.pendingPermission) {
+    const { targetSummary, timestamp } = ctx.transcript.pendingPermission;
+    const waitingSecs = Math.max(0, Math.round((Date.now() - timestamp.getTime()) / 1000));
+    push(`\x1b[33m? ${targetSummary} \x1b[2m(waiting ${waitingSecs}s)\x1b[0m`);
+  }
+
+  if ((display?.showLastRequestTokens ?? false) && ctx.transcript.lastRequestTokenUsage) {
+    const usage = ctx.transcript.lastRequestTokenUsage;
+    const input = usage.inputTokens >= 1000 ? `${Math.round(usage.inputTokens / 1000)}k` : `${usage.inputTokens}`;
+    const output = usage.outputTokens >= 1000 ? `${Math.round(usage.outputTokens / 1000)}k` : `${usage.outputTokens}`;
+    const reasoning = usage.reasoningTokens && usage.reasoningTokens > 0
+      ? ` (+${usage.reasoningTokens >= 1000 ? `${Math.round(usage.reasoningTokens / 1000)}k` : `${usage.reasoningTokens}`})`
+      : '';
+    push(label(`last: ${input}\u2192${output}${reasoning}`, colors));
   }
 
   const sessionTimeLine = renderSessionTimeLine(ctx);
@@ -445,6 +477,7 @@ function formatUsageWindowPart({
   colors,
   usageBarEnabled,
   barWidth,
+  barStyle,
   timeFormat = 'relative',
   showResetLabel,
   forceLabel = false,
@@ -458,6 +491,7 @@ function formatUsageWindowPart({
   colors?: RenderContext['config']['colors'];
   usageBarEnabled: boolean;
   barWidth: number;
+  barStyle?: 'block' | 'square' | 'thin' | 'vertical' | 'dots' | 'shade' | 'double';
   timeFormat?: TimeFormatMode;
   showResetLabel: boolean;
   forceLabel?: boolean;
@@ -478,8 +512,8 @@ function formatUsageWindowPart({
       ? (reset ? `${reset} / ${windowDurationLabel ?? windowLabel}` : null)
       : (reset ? (showResetLabel ? `${t(resetsKey)} ${reset}` : reset) : null);
     const body = barReset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${barReset})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay} (${barReset})`
+      : `${quotaBar(percent ?? 0, barWidth, colors, barStyle)} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

@@ -169,7 +169,11 @@ test('estimateSessionCost prices Claude 5 point releases like their base model',
   assert.ok(opus51);
   assert.equal(opus51.inputUsd, 5);
 
-  const sonnet51 = estimateSessionCost({ model: { display_name: 'Sonnet 5.1' } }, tokens);
+  // Pinned inside Sonnet 5's introductory window so the expected price does not
+  // drift with the wall clock; the cutoff itself is covered by the next test.
+  const sonnet51 = estimateSessionCost({ model: { display_name: 'Sonnet 5.1' } }, tokens, {
+    now: new Date('2026-08-15T00:00:00.000Z'),
+  });
   assert.ok(sonnet51);
   assert.equal(sonnet51.inputUsd, 2);
 });

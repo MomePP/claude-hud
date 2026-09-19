@@ -25,7 +25,7 @@ export function renderIdentityLine(ctx, labelOptions = {}) {
     const contextValue = formatContextValue(ctx, percent, contextValueMode);
     const contextValueDisplay = `${getContextColor(percent, colors, contextThresholds)}${contextValue}${RESET}`;
     let line = display?.showContextBar !== false
-        ? `${progressLabel("label.context", colors, labelOptions)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, contextThresholds)} ${contextValueDisplay}`
+        ? `${progressLabel("label.context", colors, labelOptions)} ${coloredBar(percent, getAdaptiveBarWidth(), colors, display?.barStyle, contextThresholds)} ${contextValueDisplay}`
         : `${progressLabel("label.context", colors, labelOptions)} ${contextValueDisplay}`;
     if (display?.showTokenBreakdown !== false && percent >= (display?.contextCriticalThreshold ?? 85)) {
         const usage = ctx.stdin.context_window?.current_usage;

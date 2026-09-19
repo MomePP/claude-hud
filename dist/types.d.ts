@@ -1,5 +1,6 @@
 import type { HudConfig } from './config.js';
 import type { GitStatus } from './git.js';
+import type { OrchestrationState } from './orchestration.js';
 import type { AuthInfo } from './auth.js';
 export interface StdinData {
     session_id?: string;
@@ -134,6 +135,20 @@ export interface SessionTokenUsage {
     cacheCreationTokens: number;
     cacheReadTokens: number;
 }
+export interface LastRequestTokenUsage {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens?: number;
+}
+export interface ThinkingState {
+    active: boolean;
+    lastSeen: Date;
+}
+export interface PendingPermission {
+    toolName: string;
+    targetSummary: string;
+    timestamp: Date;
+}
 export interface TranscriptData {
     tools: ToolEntry[];
     skills: string[];
@@ -152,10 +167,17 @@ export interface TranscriptData {
     promptCacheAnchorAt?: Date;
     promptCacheTtlSeconds?: number;
     sessionTokens?: SessionTokenUsage;
+    lastRequestTokenUsage?: LastRequestTokenUsage;
+    thinkingState?: ThinkingState;
+    pendingPermission?: PendingPermission;
     lastCompactBoundaryAt?: Date;
     lastCompactPostTokens?: number;
     compactionCount?: number;
     advisorModel?: string;
+    latestSuperpowersSkill?: {
+        name: string;
+        at: Date;
+    };
     ultracodeActive?: boolean;
     lastAssistantModel?: string;
 }
@@ -172,6 +194,7 @@ export interface RenderContext {
     memoryUsage: MemoryInfo | null;
     config: HudConfig;
     extraLabel: string | null;
+    orchestration?: OrchestrationState | null;
     outputStyle?: string;
     claudeCodeVersion?: string;
     effortLevel?: string;

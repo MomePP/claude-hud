@@ -6,6 +6,7 @@ import { renderToolsLine } from './tools-line.js';
 import { renderSkillsLine, renderMcpLine } from './skills-mcp-line.js';
 import { renderAgentsLine } from './agents-line.js';
 import { renderTodosLine } from './todos-line.js';
+import { renderOrchestrationLine } from './orchestration-line.js';
 import {
   renderIdentityLine,
   renderProjectLine,
@@ -14,6 +15,7 @@ import {
   renderEnvironmentLine,
   renderPromptCacheLine,
   renderUsageLine,
+  renderWeeklyUsageLine,
   renderMemoryLine,
   renderSessionTokensLine,
   renderCompactionsLine,
@@ -28,9 +30,22 @@ import type { ProgressLabelOptions } from './lines/label-align.js';
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_GLOBAL = /(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
-const GRAPHEME_SEGMENTER = typeof Intl.Segmenter === 'function'
-  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-  : null;
+// The first Intl.Segmenter construction triggers ICU grapheme-data init —
+// measured ~6ms in a fresh process (varies ~5-8ms by machine/Node/ICU). Since
+// the statusline is a fresh process every ~300ms, build the segmenter lazily
+// and take an ASCII fast-path so the common ASCII-only render never pays it.
+let _graphemeSegmenter: Intl.Segmenter | null | undefined;
+function getGraphemeSegmenter(): Intl.Segmenter | null {
+  if (_graphemeSegmenter !== undefined) {
+    return _graphemeSegmenter;
+  }
+  _graphemeSegmenter = typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+  return _graphemeSegmenter;
+}
+// eslint-disable-next-line no-control-regex
+const ASCII_ONLY = /^[\x00-\x7F]*$/;
 
 function stripAnsi(str: string): string {
   return str.replace(ANSI_ESCAPE_GLOBAL, '');
@@ -67,10 +82,16 @@ function segmentGraphemes(text: string): string[] {
   if (!text) {
     return [];
   }
-  if (!GRAPHEME_SEGMENTER) {
+  // ASCII fast-path: avoid constructing Intl.Segmenter for pure-ASCII text
+  // (every char is its own grapheme cluster). Saves ~2-4ms per cold start.
+  if (ASCII_ONLY.test(text)) {
     return Array.from(text);
   }
-  return Array.from(GRAPHEME_SEGMENTER.segment(text), segment => segment.segment);
+  const segmenter = getGraphemeSegmenter();
+  if (!segmenter) {
+    return Array.from(text);
+  }
+  return Array.from(segmenter.segment(text), segment => segment.segment);
 }
 
 function graphemeWidth(grapheme: string, ambiguousWide: boolean): number {
@@ -421,6 +442,13 @@ function collectActivityLines(ctx: RenderContext): string[] {
     }
   }
 
+  // Opt-in (default off); renderOrchestrationLine self-gates on
+  // showOrchestrationDetail + orchestration.
+  const orchestrationLine = renderOrchestrationLine(ctx);
+  if (orchestrationLine) {
+    activityLines.push(orchestrationLine);
+  }
+
   return activityLines;
 }
 
@@ -489,6 +517,20 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
   const seen = new Set<HudElement>();
   const lines: Array<{ line: string; isActivity: boolean }> = [];
 
+  // `display.sevenDayLayout: 'line'` splits the weekly window out of the usage
+  // element. It has no elementOrder slot of its own, so it is emitted directly
+  // beneath whichever row carried `usage` — the same shape as the orchestration
+  // detail line, which is appended rather than dispatched.
+  const pushWeeklyUsageLine = (rowElements: readonly HudElement[]): void => {
+    if (!rowElements.includes('usage')) {
+      return;
+    }
+    const weeklyLine = renderWeeklyUsageLine(ctx, separateMemoryLabelOptions);
+    if (weeklyLine) {
+      lines.push({ line: weeklyLine, isActivity: false });
+    }
+  };
+
   for (let index = 0; index < elementOrder.length; index += 1) {
     const element = elementOrder[index];
     if (seen.has(element)) {
@@ -523,7 +565,13 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
           );
 
         if (renderedGroupLines.length > 1) {
-          const combinedLine = renderedGroupLines.map(({ line }) => line).join(' │ ');
+          // Natural-style fork: honor display.naturalSeparator between merged
+          // elements (otherwise Context + Usage would still show the pipes-
+          // style ` │ ` even when the project line uses prose separators).
+          const mergeSep = ctx.config?.display?.projectStyle === 'natural'
+            ? (ctx.config?.display?.naturalSeparator || ' \u00B7 ')
+            : ' \u2502 ';
+          const combinedLine = renderedGroupLines.map(({ line }) => line).join(mergeSep);
           const widthIsReal = terminalWidth !== UNKNOWN_TERMINAL_WIDTH;
           // The fit check uses the unpadded join: right-alignment only inserts
           // spaces, so it never changes whether the content itself fits.
@@ -537,6 +585,7 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
               line: alignedLine ?? combinedLine,
               isActivity: renderedGroupLines.some(({ element: groupedElement }) => ACTIVITY_ELEMENTS.has(groupedElement)),
             });
+            pushWeeklyUsageLine(renderedGroupLines.map(({ element: e }) => e));
           } else {
             for (const { element: groupedElement, line } of renderedGroupLines) {
               const stackedLine = renderElementLine(ctx, groupedElement, {
@@ -547,6 +596,7 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
                 line: stackedLine,
                 isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
               });
+              pushWeeklyUsageLine([groupedElement]);
             }
           }
         } else if (renderedGroupLines.length === 1) {
@@ -560,6 +610,7 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
             line: separateLine,
             isActivity: ACTIVITY_ELEMENTS.has(groupedElement),
           });
+          pushWeeklyUsageLine([groupedElement]);
         }
 
         continue;
@@ -577,6 +628,16 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
       line,
       isActivity: ACTIVITY_ELEMENTS.has(element),
     });
+    pushWeeklyUsageLine([element]);
+  }
+
+  // The detail line has no `elementOrder` slot, so it is appended here rather
+  // than dispatched through renderElementLine — mirroring collectActivityLines
+  // in the compact path. showOrchestrationDetail is documented as a plain
+  // opt-in line, so it must not depend on which layout is active.
+  const orchestrationLine = renderOrchestrationLine(ctx);
+  if (orchestrationLine) {
+    lines.push({ line: orchestrationLine, isActivity: true });
   }
 
   // Git files line always goes last (pass width so it can hide itself if too narrow)

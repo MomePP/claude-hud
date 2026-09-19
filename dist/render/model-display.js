@@ -1,5 +1,12 @@
 import { getProviderLabel } from '../stdin.js';
-function formatEffortSuffix(ctx, format) {
+/**
+ * The ` ◑ high` suffix appended after the model name, per `display.effortFormat`.
+ *
+ * Exported because the fork's `projectStyle: 'natural'` composes its own model
+ * segment instead of going through formatModelDisplay, and must render the
+ * effort identically rather than reimplementing the ultracode carve-out.
+ */
+export function formatEffortSuffix(ctx, format) {
     if (!ctx.effortLevel) {
         return '';
     }

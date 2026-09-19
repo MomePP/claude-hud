@@ -10,10 +10,16 @@ function tableOptionKeys(markdown) {
   return [...markdown.matchAll(/^\| `([A-Za-z][\w.]+)` \|/gm)].map((match) => match[1]);
 }
 
-test('README.zh.md documents every English options-table key', () => {
-  const en = tableOptionKeys(readFileSync(join(root, 'README.md'), 'utf8'));
+// Fork divergence: upstream asserts exact table parity between the two READMEs.
+// The fork documents its own options (natural style, orchestration, glyphs, …)
+// in English only, and covers `externalUsage*` in prose rather than the table,
+// so parity cannot hold. The invariant kept here is that the zh table never
+// documents an option the English README has dropped.
+test('README.zh.md documents only options the English README documents', () => {
+  const en = readFileSync(join(root, 'README.md'), 'utf8');
   const zh = tableOptionKeys(readFileSync(join(root, 'README.zh.md'), 'utf8'));
-  assert.deepEqual([...new Set(zh)].sort(), [...new Set(en)].sort());
+  const stale = [...new Set(zh)].filter((key) => !en.includes(`\`${key}\``));
+  assert.deepEqual(stale, []);
 });
 
 test('README.zh.md states that externalUsagePath must be absolute', () => {
